@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Portal ETL - Almacenamiento de Datos{% endblock %}</title>
+    <style>
+        :root {
+            --bg-main: #121824;
+            --bg-card: #1c2434;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --primary: #3b82f6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --border: #2e3a52;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+        }
+        nav {
+            background-color: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        nav a {
+            color: var(--text-main);
+            text-decoration: none;
+            margin-right: 1.5rem;
+            font-weight: 500;
+        }
+        nav a:hover { color: var(--primary); }
+        .nav-brand { font-size: 1.25rem; font-weight: 700; color: var(--primary) !important; }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
+        .messages { margin-bottom: 2rem; list-style: none; padding: 0; }
+        .message { padding: 1rem; border-radius: 6px; margin-bottom: 0.5rem; font-weight: 500; }
+        .message.success { background-color: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid var(--success); }
+        .message.error { background-color: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); }
+        .message.warning { background-color: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid var(--warning); }
+        {% block extra_css %}{% endblock %}
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="{% url 'etl_app:index' %}" class="nav-brand">📊 DATA-ETL Portal</a>
+        <div>
+            <a href="{% url 'etl_app:index' %}">Inicio</a>
+            <a href="{% url 'etl_app:upload_famosos' %}">Cargar Famosos</a>
+            <a href="{% url 'etl_app:upload_lugares' %}">Cargar Lugares</a>
+            <a href="/admin/" target="_blank" style="color: var(--warning)">Django Admin ↗</a>
+        </div>
+    </nav>
+    <div class="container">
+        {% if messages %}
+            <ul class="messages">
+                {% for message in messages %}
+                    <li class="message {{ message.tags }}">{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

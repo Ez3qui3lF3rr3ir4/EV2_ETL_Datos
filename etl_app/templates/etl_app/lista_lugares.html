@@ -1,0 +1,209 @@
+{% extends 'etl_app/base.html' %}
+{% block title %}Registros de Lugares{% endblock %}
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <h1>Registros de Lugares Ingestados</h1>
+    <a href="{% url 'etl_app:index' %}" style="color: var(--text-muted); text-decoration: none;">← Volver al Panel</a>
+</div>
+
+<p style="color: var(--text-muted)">
+    Listado de ubicaciones procesadas. Los datos crudos del TXT se han limpiado de encoding corrupto y estructurado en tres tablas relacionales independientes (<strong>Lugar</strong>, <strong>Dirección</strong> y <strong>Georeferencia</strong>).
+</p>
+
+<div style="margin-bottom: 2rem;">
+    <button onclick="toggleDatosTablas()" style="background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid var(--success); padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 0.5rem; transition: background 0.2s;">
+        📊 <span>Tablas Independientes</span>
+    </button>
+
+    <div id="seccion-datos-tablas" style="display: none; margin-top: 1rem; background: rgba(28, 36, 52, 0.5); border: 1px dashed var(--border); padding: 1.5rem; border-radius: 8px;">
+        
+        <style>
+            .tabla-scroll-contenedor {
+                max-height: 260px; 
+                overflow-y: auto; 
+                overflow-x: auto;
+                scrollbar-width: thin;
+                scrollbar-color: var(--primary) var(--bg-card);
+            }
+            /* Soporte extra para navegadores basados en Webkit (Chrome, Edge, Safari) */
+            .tabla-scroll-contenedor::-webkit-scrollbar {
+                width: 6px;
+                height: 6px;
+            }
+            .tabla-scroll-contenedor::-webkit-scrollbar-track {
+                background: var(--bg-card);
+                border-radius: 4px;
+            }
+            .tabla-scroll-contenedor::-webkit-scrollbar-thumb {
+                background-color: var(--primary);
+                border-radius: 4px;
+            }
+        </style>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+            
+            <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 3px solid var(--primary);">
+                <h4 style="margin: 0 0 0.75rem 0; color: var(--primary); font-size: 0.9rem; font-family: monospace;">📋 TABLA: Lugares</h4>
+                <div class="tabla-scroll-contenedor">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left;">
+                        <thead style="position: sticky; top: 0; background: var(--bg-card); z-index: 1;">
+                            <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted);">
+                                <th style="padding: 0.4rem;">id</th>
+                                <th style="padding: 0.4rem;">nombre_lugar</th>
+                                <th style="padding: 0.4rem; color: var(--success);">direccion_id</th>
+                                <th style="padding: 0.4rem; color: var(--warning);">georeferencia_id</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for lugar in lugares %}
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                <td style="padding: 0.4rem; font-family: monospace;">{{ lugar.id }}</td>
+                                <td style="padding: 0.4rem; font-weight: bold;">{{ lugar.nombre_lugar|truncatechars:14 }}</td>
+                                <td style="padding: 0.4rem; color: var(--success); font-family: monospace; font-weight: bold;">
+                                    {{ lugar.direccion.id|default:"NULL" }}
+                                </td>
+                                <td style="padding: 0.4rem; color: var(--warning); font-family: monospace; font-weight: bold;">
+                                    {% if lugar.georeferencia %}{{ lugar.georeferencia.id }}{% else %}NULL{% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 3px solid var(--success);">
+                <h4 style="margin: 0 0 0.75rem 0; color: var(--success); font-size: 0.9rem; font-family: monospace;">📋 TABLA: Direcciones</h4>
+                <div class="tabla-scroll-contenedor">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left;">
+                        <thead style="position: sticky; top: 0; background: var(--bg-card); z-index: 1;">
+                            <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted);">
+                                <th style="padding: 0.4rem; color: var(--success);">id (PK)</th>
+                                <th style="padding: 0.4rem;">calle</th>
+                                <th style="padding: 0.4rem;">N°</th>
+                                <th style="padding: 0.4rem;">país</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for lugar in lugares %}
+                            {% if lugar.direccion %}
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                <td style="padding: 0.4rem; color: var(--success); font-family: monospace; font-weight: bold;">{{ lugar.direccion.id }}</td>
+                                <td style="padding: 0.4rem;">{{ lugar.direccion.nombre_calle|truncatechars:12 }}</td>
+                                <td style="padding: 0.4rem;">{{ lugar.direccion.numero_calle|default:"S/N" }}</td>
+                                <td style="padding: 0.4rem; color: var(--text-muted);">{{ lugar.direccion.pais|default:"-" }}</td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 3px solid var(--warning);">
+                <h4 style="margin: 0 0 0.75rem 0; color: var(--warning); font-size: 0.9rem; font-family: monospace;">📋 TABLA: Georeferencia</h4>
+                <div class="tabla-scroll-contenedor">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left;">
+                        <thead style="position: sticky; top: 0; background: var(--bg-card); z-index: 1;">
+                            <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted);">
+                                <th style="padding: 0.4rem; color: var(--warning);">id (PK)</th>
+                                <th style="padding: 0.4rem;">latitud</th>
+                                <th style="padding: 0.4rem;">longitud</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for lugar in lugares %}
+                            {% if lugar.georeferencia %}
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                <td style="padding: 0.4rem; color: var(--warning); font-family: monospace; font-weight: bold;">{{ lugar.georeferencia.id }}</td>
+                                <td style="padding: 0.4rem; font-family: monospace;">{{ lugar.georeferencia.latitud }}</td>
+                                <td style="padding: 0.4rem; font-family: monospace;">{{ lugar.georeferencia.longitud }}</td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleDatosTablas() {
+    var x = document.getElementById("seccion-datos-tablas");
+    if (x.style.display === "none") {
+        x.style.display = "block";
+    } else {
+        x.style.display = "none";
+    }
+}
+</script>
+
+<table style="width: 100%; border-collapse: collapse; background: var(--bg-card); border-radius: 8px; overflow: hidden; margin-top: 1.5rem; border: 1px solid var(--border);">
+    <thead>
+        <tr style="border-bottom: 1px solid var(--border); text-align: left; background: rgba(0,0,0,0.25);">
+            <th style="padding: 1rem; color: var(--success);">ID</th>
+            <th style="padding: 1rem;">Nombre del Lugar</th>
+            <th style="padding: 1rem;">Dirección Normalizada</th>
+            <th style="padding: 1rem;">País / Ciudad</th>
+            <th style="padding: 1rem; text-align: center;">Coordenadas GPS</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for lugar in lugares %}
+        <tr style="border-bottom: 1px solid var(--border); font-size: 0.95rem;">
+            <td style="padding: 1rem; font-weight: bold; color: var(--text-muted);">#{{ lugar.id }}</td>
+            
+            <td style="padding: 1rem;"><strong>{{ lugar.nombre_lugar }}</strong></td>
+            
+            <td style="padding: 1rem;">
+                {% if lugar.direccion %}
+                    {{ lugar.direccion.nombre_calle }} {{ lugar.direccion.numero_calle }}
+                {% else %}
+                    <span style="color: var(--text-muted); font-style: italic;">Sin dirección</span>
+                {% endif %}
+            </td>
+            
+            <td style="padding: 1rem;">
+                {% if lugar.direccion %}
+                    <small style="display: block; color: var(--text-muted);">{{ lugar.direccion.ciudad_estado_provincia|default:"-" }}</small>
+                    <span style="font-weight: 500;">{{ lugar.direccion.pais|default:"-" }}</span>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            
+            <td style="padding: 1rem; text-align: center;">
+                {% if lugar.georeferencia %}
+                    <span style="font-family: monospace; background: rgba(16,185,129,0.1); padding: 0.25rem 0.5rem; border-radius: 4px; color: #34d399; font-size: 0.85rem;">
+                        {{ lugar.georeferencia.latitud }}, {{ lugar.georeferencia.longitud }}
+                    </span>
+                {% else %}
+                    <span style="color: var(--text-muted); font-size: 0.85rem; font-style: italic;">N/A</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="5" style="padding: 3rem; text-align: center; color: var(--text-muted);">
+                No hay registros de lugares en la base de datos. ¡Inicia una carga de datos raw (.TXT)!
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if is_paginated %}
+<div style="margin-top: 1.5rem; display: flex; gap: 0.5rem; justify-content: center;">
+    {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}" style="background: var(--border); color: white; padding: 0.5rem 1rem; border-radius: 4px; text-decoration: none;">Anterior</a>
+    {% endif %}
+    <span style="padding: 0.5rem 1rem; color: var(--text-muted);">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}" style="background: var(--border); color: white; padding: 0.5rem 1rem; border-radius: 4px; text-decoration: none;">Siguiente</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

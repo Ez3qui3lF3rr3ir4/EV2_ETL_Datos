@@ -1,0 +1,171 @@
+"""
+settings.py — Configuración del proyecto Django para ArquitecturaDeDatos EV2 P2
+SQLite como base de datos, logging a archivo y consola, soporte para archivos media (uploads TXT).
+"""
+
+from pathlib import Path
+
+# ──────────────────────────────────────────────────────────────
+# Rutas base
+# ──────────────────────────────────────────────────────────────
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# ──────────────────────────────────────────────────────────────
+# Seguridad — solo para entorno local/desarrollo
+# ──────────────────────────────────────────────────────────────
+SECRET_KEY = 'django-insecure-etl-app-datos2026-clave-local-no-produccion'
+DEBUG = True
+ALLOWED_HOSTS = ['*']
+
+# ──────────────────────────────────────────────────────────────
+# Aplicaciones instaladas
+# ──────────────────────────────────────────────────────────────
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'etl_app',  # Nuestra aplicación ETL
+]
+
+# ──────────────────────────────────────────────────────────────
+# Middleware
+# ──────────────────────────────────────────────────────────────
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+ROOT_URLCONF = 'datos_proyecto.urls'
+
+# ──────────────────────────────────────────────────────────────
+# Templates — directorio dentro de cada app
+# ──────────────────────────────────────────────────────────────
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = 'datos_proyecto.wsgi.application'
+
+# ──────────────────────────────────────────────────────────────
+# Base de datos — SQLite (requerimiento del proyecto)
+# ──────────────────────────────────────────────────────────────
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
+
+# ──────────────────────────────────────────────────────────────
+# Validaciones de contraseña (auth estándar)
+# ──────────────────────────────────────────────────────────────
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
+
+# ──────────────────────────────────────────────────────────────
+# Internacionalización
+# ──────────────────────────────────────────────────────────────
+LANGUAGE_CODE = 'es-cl'
+TIME_ZONE = 'America/Santiago'
+USE_I18N = True
+USE_TZ = True
+
+# ──────────────────────────────────────────────────────────────
+# Archivos estáticos
+# ──────────────────────────────────────────────────────────────
+STATIC_URL = 'static/'
+
+# ──────────────────────────────────────────────────────────────
+# Archivos media — TXT subidos por el usuario
+# ──────────────────────────────────────────────────────────────
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# ──────────────────────────────────────────────────────────────
+# PK por defecto
+# ──────────────────────────────────────────────────────────────
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ──────────────────────────────────────────────────────────────
+# Tamaño máximo de archivo subido (50 MB)
+# ──────────────────────────────────────────────────────────────
+DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800
+FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800
+
+# ──────────────────────────────────────────────────────────────
+# LOGGING — logs ETL a consola y archivo logs/etl.log
+# ──────────────────────────────────────────────────────────────
+LOGS_DIR = BASE_DIR / 'logs'
+LOGS_DIR.mkdir(exist_ok=True)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{asctime}] [{levelname}] [{name}] {message}',
+            'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+        'simple': {
+            'format': '[{levelname}] {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+        'file_etl': {
+            'class': 'logging.FileHandler',
+            'filename': str(LOGS_DIR / 'etl.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+        },
+        'file_errores': {
+            'class': 'logging.FileHandler',
+            'filename': str(LOGS_DIR / 'errores.log'),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
+        },
+    },
+    'loggers': {
+        # Logger principal del ETL
+        'etl_app': {
+            'handlers': ['console', 'file_etl'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        # Logger específico de errores
+        'etl_app.errores': {
+            'handlers': ['console', 'file_errores'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
+}

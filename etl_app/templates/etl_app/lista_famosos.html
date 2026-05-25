@@ -1,0 +1,57 @@
+{% extends 'etl_app/base.html' %}
+{% block title %}Registros de Famosos{% endblock %}
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <h1>Registros de Famosos Ingestados</h1>
+    <a href="{% url 'etl_app:index' %}" style="color: var(--text-muted); text-decoration: none;">← Volver al Panel</a>
+</div>
+
+<p style="color: var(--text-muted)">Listado completo de celebridades procesadas, deduplicadas por SHA-256 con cálculo dinámico de edades.</p>
+
+<table style="width: 100%; border-collapse: collapse; background: var(--bg-card); border-radius: 8px; overflow: hidden; margin-top: 1.5rem; border: 1px solid var(--border);">
+    <thead>
+        <tr style="border-bottom: 1px solid var(--border); text-align: left; background: rgba(0,0,0,0.25);">
+            <th style="padding: 1rem; color: var(--primary);">ID</th>
+            <th style="padding: 1rem;">Nombre Completo</th>
+            <th style="padding: 1rem;">Fecha Nacimiento</th>
+            <th style="padding: 1rem;">Edad Actual</th>
+            <th style="padding: 1rem; text-align: center;">¿Cumpleaños Hoy?</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for famoso in famosos %}
+        <tr style="border-bottom: 1px solid var(--border); font-size: 0.95rem;">
+            <td style="padding: 1rem; font-weight: bold; color: var(--text-muted);">#{{ famoso.id }}</td>
+            <td style="padding: 1rem;"><strong>{{ famoso.nombre_completo }}</strong></td>
+            <td style="padding: 1rem; font-family: monospace;">{{ famoso.fecha_nacimiento|date:"Y-m-d"|default:"Aproximada/No registra" }}</td>
+            <td style="padding: 1rem;"><span style="background: rgba(59,130,246,0.1); padding: 0.25rem 0.5rem; border-radius: 4px; color: #60a5fa;">{{ famoso.edad_actual }} años</span></td>
+            <td style="padding: 1rem; text-align: center;">
+                {% if famoso.esta_de_cumpleanos %}
+                    <span style="background: rgba(16,185,129,0.2); color: var(--success); padding: 0.25rem 0.75rem; border-radius: 20px; font-weight: bold; font-size: 0.85rem;">🎉 ¡HOY!</span>
+                {% else %}
+                    <span style="color: var(--text-muted); font-size: 0.85rem;">No</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="5" style="padding: 3rem; text-align: center; color: var(--text-muted);">
+                No hay registros de famosos en la base de datos. ¡Inicia una carga de datos raw (.txt)!
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if is_paginated %}
+<div style="margin-top: 1.5rem; display: flex; gap: 0.5rem; justify-content: center;">
+    {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}" style="background: var(--border); color: white; padding: 0.5rem 1rem; border-radius: 4px; text-decoration: none;">Anterior</a>
+    {% endif %}
+    <span style="padding: 0.5rem 1rem; color: var(--text-muted);">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}" style="background: var(--border); color: white; padding: 0.5rem 1rem; border-radius: 4px; text-decoration: none;">Siguiente</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
