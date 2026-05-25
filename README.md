@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Proyecto ETL — ArquitecturaDeDatos EV2 P2
 
 Breve: aplicación Django para procesar dos datasets TXT (Famosos y Lugares) y almacenar resultados en la base de datos.
@@ -121,3 +122,6 @@ Si quieres, puedo:
 - abrir un PR con correcciones sugeridas al código ETL.
 
 ---
+=======
+# EV2_ETL_Datos
+>>>>>>> 35e3632086a5f6bf1ee0c8f499cf9090d893dc84
