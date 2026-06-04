@@ -224,6 +224,20 @@ class Direccion(models.Model):
         verbose_name='Número',
     )
 
+    comuna = models.CharField(
+        max_length=150,
+        blank=True,
+        default='',
+        verbose_name='Comuna',
+    )
+
+    ciudad = models.CharField(
+        max_length=150,
+        blank=True,
+        default='',
+        verbose_name='Ciudad',
+    )
+
     ciudad_estado_provincia = models.CharField(
         max_length=200,
         blank=True,

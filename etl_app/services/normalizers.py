@@ -55,6 +55,8 @@ _FORMATOS_FECHA = [
     '%Y-%m-%d',   # 1879-03-14
     '%d-%m-%Y',   # 24-07-1897
     '%d/%m/%Y',   # 25/10/1881
+    '%m/%d/%Y',   # Fallback US format: 06/26/1987
+    '%m-%d-%Y',   # Fallback US format
 ]
 
 # Patrones que indican fecha aproximada o histórica no parseable
@@ -95,42 +97,48 @@ def normalizar_fecha(fecha_raw: str) -> tuple:
             date | None,          Objeto date si se parseó correctamente, None si no
             bool,                 es_aproximada: True si la fecha no es exacta
             str,                  fecha_formateada: "DD-MM-YYYY" o texto original
+            str                   msg_ambiguedad: Mensaje si la fecha es ambigua (ej. 04/06)
         )
     """
     fecha_raw = fecha_raw.strip() if fecha_raw else ''
 
     if not fecha_raw:
-        return None, True, ''
+        return None, True, '', ''
 
     # ── Caso 1: contiene "alrededor de" → aproximada ──────────
     if _RE_APROXIMADA.search(fecha_raw):
         logger.debug(f"[normalizer] Fecha aproximada detectada: {fecha_raw!r}")
-        return None, True, fecha_raw
+        return None, True, fecha_raw, ''
 
     # ── Caso 2: contiene "a.C." → fecha antes de Cristo ───────
     if _RE_AC.search(fecha_raw):
-        # Intentar extraer el patrón "100 a.C./07/12" aunque sea aproximada
         match_ac = _RE_AC_CON_FECHA.search(fecha_raw)
         if match_ac:
             logger.debug(f"[normalizer] Fecha a.C. con día/mes: {fecha_raw!r}")
         logger.debug(f"[normalizer] Fecha a.C. (histórica): {fecha_raw!r}")
-        return None, True, fecha_raw
+        return None, True, fecha_raw, ''
 
     # ── Caso 3: intentar todos los formatos conocidos ──────────
     for fmt in _FORMATOS_FECHA:
         try:
             fecha_obj = _parse_fecha_con_formato(fecha_raw, fmt)
             if fecha_obj:
-                # Formatear a formato chileno: DD-MM-YYYY
                 fecha_formateada = fecha_obj.strftime('%d-%m-%Y')
-                logger.debug(f"[normalizer] Fecha parseada: {fecha_raw!r} → {fecha_formateada}")
-                return fecha_obj, False, fecha_formateada
+                
+                msg_ambiguedad = ''
+                if fecha_obj.day <= 12 and fecha_obj.month <= 12 and fecha_obj.day != fecha_obj.month:
+                    msg_ambiguedad = f"Fecha ambigua '{fecha_raw}'. Se interpretó como {fecha_formateada} usando el formato estándar."
+                    logger.warning(f"[normalizer] {msg_ambiguedad}")
+                else:
+                    logger.debug(f"[normalizer] Fecha parseada: {fecha_raw!r} → {fecha_formateada}")
+                    
+                return fecha_obj, False, fecha_formateada, msg_ambiguedad
         except Exception:
             continue
 
     # ── Caso 4: no se pudo parsear ─────────────────────────────
     logger.warning(f"[normalizer] Fecha no reconocida: {fecha_raw!r}")
-    return None, True, fecha_raw
+    return None, True, fecha_raw, ''
 
 
 def _parse_fecha_con_formato(fecha_str: str, fmt: str) -> date | None:
@@ -326,34 +334,36 @@ def normalizar_direccion(dir_raw: str) -> dict:
 
     nombre_calle = ''
     numero_calle = ''
-    ciudad_estado_provincia = ''
+    comuna = ''
+    ciudad = ''
     pais = ''
 
     if len(partes) == 1:
-        # Solo hay un elemento, es el nombre de la calle o un lugar especial
         nombre_calle = partes[0]
-
     elif len(partes) == 2:
-        # Ejemplo: "Westminster, London SW1A 1AA, UK" (ya que el resultado de split)
         nombre_calle = partes[0]
         pais = partes[1]
-
-    elif len(partes) >= 3:
-        # Asumir: primera parte = calle, última = país, medio = ciudad/estado
+    elif len(partes) == 3:
         nombre_calle = partes[0]
+        ciudad = partes[1]
+        pais = partes[2]
+    elif len(partes) >= 4:
+        # Ejemplo: Calle 123, Providencia, Santiago, Chile
+        nombre_calle = partes[0]
+        comuna = partes[1]
+        ciudad = partes[2]
         pais = partes[-1]
-        ciudad_estado_provincia = ', '.join(partes[1:-1])
 
     # Intentar extraer número del inicio de la calle
     num_match = re.match(r'^(\d+)\s+(.+)$', nombre_calle)
     if num_match:
         numero_calle = num_match.group(1)
-        # No modificamos nombre_calle para mantener la dirección completa
 
     return {
         'nombre_calle': nombre_calle,
         'numero_calle': numero_calle,
-        'ciudad_estado_provincia': ciudad_estado_provincia,
+        'comuna': comuna,
+        'ciudad': ciudad,
         'pais': pais.strip(),
         'direccion_completa': dir_limpia,
     }

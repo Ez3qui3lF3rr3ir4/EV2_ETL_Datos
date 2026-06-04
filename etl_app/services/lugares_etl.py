@@ -253,11 +253,13 @@ def _procesar_linea_lugar(linea: str, num_linea: int, resultado: ResultadoETLLug
             )
 
             # 2. Crear el registro en la tabla Direcciones asociado al Lugar
-            # Campos requeridos por la regla: ID (autogenerado), nombre_calle, numero_calle, ciudad_estado_provincia, país
+            # Campos requeridos por la regla: ID (autogenerado), nombre_calle, numero_calle, ciudad, comuna, país
             Direccion.objects.create(
                 lugar=lugar,
                 nombre_calle=dir_info.get('nombre_calle', ''),
                 numero_calle=dir_info.get('numero_calle', ''),
+                comuna=dir_info.get('comuna', ''),
+                ciudad=dir_info.get('ciudad', ''),
                 ciudad_estado_provincia=dir_info.get('ciudad_estado_provincia', ''),
                 pais=dir_info.get('pais', ''),
                 direccion_completa=dir_info.get('direccion_completa', '') # Opcional para auditoría

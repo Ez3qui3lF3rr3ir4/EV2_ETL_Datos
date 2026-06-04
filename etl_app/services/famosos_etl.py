@@ -215,7 +215,16 @@ def _procesar_linea_famoso(linea: str, num_linea: int, resultado: ResultadoETL, 
 
     # ── PASO 3: Normalizar ─────────────────────────────────────
     nombre_norm = normalizar_nombre(nombre_raw)
-    fecha_obj, es_aproximada, fecha_formateada = normalizar_fecha(fecha_raw)
+    fecha_obj, es_aproximada, fecha_formateada, msg_ambiguedad = normalizar_fecha(fecha_raw)
+
+    if msg_ambiguedad:
+        _registrar_error(
+            dataset='famosos',
+            linea_numero=num_linea,
+            contenido=linea_limpia,
+            tipo='fecha_ambigua',
+            mensaje=msg_ambiguedad,
+        )
 
     # ── PASO 4: Generar hash único ─────────────────────────────
     # Hash basado en nombre normalizado + fecha_original (texto crudo)
