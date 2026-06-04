@@ -35,32 +35,43 @@ def fetch_comuna_info(nombre_comuna):
 def fetch_famoso_image(nombre_famoso):
     """
     Busca la imagen del famoso usando MediaWiki Action API (Wikipedia).
+    Utiliza el motor de búsqueda en lugar de títulos exactos para mayor precisión.
+    Intenta primero en Wikipedia en español, y si no encuentra imagen, busca en Wikipedia en inglés.
     """
-    url = "https://es.wikipedia.org/w/api.php"
-    params = {
-        "action": "query",
-        "prop": "pageimages",
-        "titles": nombre_famoso,
-        "format": "json",
-        "pithumbsize": 800
-    }
-    
-    try:
-        response = requests.get(url, params=params, timeout=5, headers={"User-Agent": "ETLBot/1.0"})
-        if response.status_code == 200:
-            data = response.json()
-            pages = data.get("query", {}).get("pages", {})
-            for page_id, page_info in pages.items():
-                if page_id != "-1" and "thumbnail" in page_info:
-                    return {
-                        "url": page_info["thumbnail"]["source"],
-                        "fuente": "Wikipedia",
-                        "fecha": date.today().isoformat()
-                    }
-    except Exception as e:
-        logger.warning(f"Error consultando imagen en Wikipedia para {nombre_famoso}: {e}")
+    def buscar_en_wikipedia(lang, nombre):
+        url = f"https://{lang}.wikipedia.org/w/api.php"
+        params = {
+            "action": "query",
+            "generator": "search",
+            "gsrsearch": nombre,
+            "gsrlimit": 1,
+            "prop": "pageimages",
+            "format": "json",
+            "pithumbsize": 800
+        }
+        try:
+            response = requests.get(url, params=params, timeout=5, headers={"User-Agent": "ETLBot/1.0"})
+            if response.status_code == 200:
+                data = response.json()
+                pages = data.get("query", {}).get("pages", {})
+                for page_id, page_info in pages.items():
+                    if page_id != "-1" and "thumbnail" in page_info:
+                        return {
+                            "url": page_info["thumbnail"]["source"],
+                            "fuente": f"Wikipedia ({lang})",
+                            "fecha": date.today().isoformat()
+                        }
+        except Exception as e:
+            logger.warning(f"Error consultando imagen en Wikipedia ({lang}) para {nombre}: {e}")
+        return None
+
+    # Primero intentar en español
+    resultado = buscar_en_wikipedia("es", nombre_famoso)
+    if resultado:
+        return resultado
         
-    return None
+    # Fallback a inglés
+    return buscar_en_wikipedia("en", nombre_famoso)
 
 def geocode_lugar(nombre_lugar):
     """
