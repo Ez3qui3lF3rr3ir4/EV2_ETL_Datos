@@ -125,33 +125,21 @@ def es_duplicado_lugar(hash_str: str) -> bool:
     return existe
 
 
-def buscar_famoso_por_nombre_y_fecha(nombre_norm: str, fecha_nacimiento) -> bool:
+def buscar_famoso_por_nombre(nombre_norm: str):
     """
-    Verifica si ya existe un Famoso con el mismo nombre y fecha de nacimiento.
-    Esta verificación secundaria captura duplicados que tienen DISTINTO
-    formato en el TXT pero representan la misma persona.
+    Verifica si ya existe un Famoso con el mismo nombre normalizado.
+    Esta verificación secundaria captura duplicados que representan a la misma
+    persona pero pueden tener fechas con distintos formatos o errores en el TXT.
 
-    Ejemplo:
-        "Albert Einstein - 1879-03-14"  (primera importación)
-        "Albert Einstein - 1879/03/14"  (segunda importación → mismo famoso)
-
-    Retorna True si ya existe un famoso con ese nombre y fecha.
+    Si encuentra la persona, retorna el objeto Famoso existente para que el ETL
+    pueda decidir si actualizar sus datos (ej. si la nueva fecha es válida y la vieja no).
+    Retorna None si no existe.
     """
     from etl_app.models import Famoso
 
-    if fecha_nacimiento is None:
-        # Para fechas aproximadas, solo comparar por nombre
-        existe = Famoso.objects.filter(
-            nombre_completo__iexact=nombre_norm,
-            es_fecha_aproximada=True
-        ).exists()
-    else:
-        existe = Famoso.objects.filter(
-            nombre_completo__iexact=nombre_norm,
-            fecha_nacimiento=fecha_nacimiento
-        ).exists()
+    famoso_existente = Famoso.objects.filter(nombre_completo__iexact=nombre_norm).first()
 
-    if existe:
-        logger.debug(f"[dedup] Duplicado semántico famoso: {nombre_norm!r} / {fecha_nacimiento}")
+    if famoso_existente:
+        logger.debug(f"[dedup] Duplicado semántico famoso detectado por nombre: {nombre_norm!r}")
 
-    return existe
+    return famoso_existente

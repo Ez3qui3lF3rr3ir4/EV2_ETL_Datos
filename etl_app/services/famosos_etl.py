@@ -82,7 +82,7 @@ def procesar_archivo_famosos(ruta_archivo: str | Path) -> ResultadoETL:
     from etl_app.services.deduplicator import (
         generar_hash_famoso,
         es_duplicado_famoso,
-        buscar_famoso_por_nombre_y_fecha,
+        buscar_famoso_por_nombre,
     )
     from etl_app.services.validators import validar_linea_famoso, validar_fecha_nacimiento
     from etl_app.models import Famoso, ErrorImportacion, EjecucionETL
@@ -156,7 +156,7 @@ def _procesar_linea_famoso(linea: str, num_linea: int, resultado: ResultadoETL, 
     from etl_app.services.deduplicator import (
         generar_hash_famoso,
         es_duplicado_famoso,
-        buscar_famoso_por_nombre_y_fecha,
+        buscar_famoso_por_nombre,
     )
     from etl_app.services.validators import validar_linea_famoso, validar_fecha_nacimiento
     from etl_app.services.external_apis import fetch_famoso_image
@@ -233,9 +233,20 @@ def _procesar_linea_famoso(linea: str, num_linea: int, resultado: ResultadoETL, 
         })
         return
 
-    # ── PASO 6: Deduplicación semántica (mismo nombre + fecha parseada) ─
-    if buscar_famoso_por_nombre_y_fecha(nombre_norm, fecha_obj):
+    # ── PASO 6: Deduplicación semántica (mismo nombre) ────────────────────────
+    famoso_existente = buscar_famoso_por_nombre(nombre_norm)
+    if famoso_existente:
         logger.info(f"[ETL Famosos] DUP (semántico): {nombre_norm} — {fecha_raw}")
+        
+        # Si el existente tiene una fecha mala/aproximada y el nuevo tiene una fecha buena,
+        # aprovechamos para mejorar el dato existente en la base de datos.
+        if famoso_existente.es_fecha_aproximada and not es_aproximada:
+            famoso_existente.fecha_nacimiento = fecha_obj
+            famoso_existente.fecha_original = fecha_raw
+            famoso_existente.es_fecha_aproximada = False
+            famoso_existente.save()
+            logger.info(f"[ETL Famosos] UPDATED DATE: {nombre_norm} ahora tiene la fecha válida {fecha_formateada}")
+
         resultado.duplicados += 1
         if ejecucion: ejecucion.duplicados_eliminados += 1
         resultado.lista_duplicados.append({
