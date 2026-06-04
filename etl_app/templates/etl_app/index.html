@@ -32,7 +32,7 @@
     <div style="margin-top: 1.5rem;">
         <a href="{% url 'etl_app:upload_famosos' %}" style="background: var(--primary); color: white; padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; margin-right: 1rem; font-weight: bold; display: inline-block;">Subir TXT Famosos</a>
         <a href="{% url 'etl_app:upload_lugares' %}" style="background: var(--success); color: white; padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Subir TXT Lugares</a>
-        <a href="#" style="background: var(--info, #17a2b8); color: white; padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block; margin-left: 1rem;">Subir TXT Comunas</a>
+        <a href="{% url 'etl_app:upload_comunas' %}" style="background: var(--info, #17a2b8); color: white; padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block; margin-left: 1rem;">Subir TXT Comunas</a>
     </div>
 </div>
 {% endblock %}

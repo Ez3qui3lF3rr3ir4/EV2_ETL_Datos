@@ -230,6 +230,76 @@ class UploadLugaresView(View):
             return render(request, self.template_name, {'form': form})
 
         return redirect('etl_app:resultado')
+    
+# ══════════════════════════════════════════════════════════════
+# SUBIDA Y PROCESAMIENTO — COMUNAS
+# ══════════════════════════════════════════════════════════════
+
+class UploadComunasView(View):
+    """
+    Vista para subir el archivo TXT de Comunas y ejecutar el ETL.
+    """
+    template_name = 'etl_app/upload_comunas.html'
+    form_class = SubirComunasForm
+
+    def get(self, request):
+        form = self.form_class()
+        return render(request, self.template_name, {'form': form})
+
+    def post(self, request):
+        form = self.form_class(request.POST, request.FILES)
+
+        if not form.is_valid():
+            for field, errores in form.errors.items():
+                for error in errores:
+                    messages.error(request, f"Error en {field}: {error}")
+            return render(request, self.template_name, {'form': form})
+
+        archivo = form.cleaned_data['archivo']
+        limpiar_antes = form.cleaned_data.get('limpiar_antes', False)
+
+        if limpiar_antes:
+            count_eliminados = Comuna.objects.count()
+            Comuna.objects.all().delete()
+            ErrorImportacion.objects.filter(dataset='comunas').delete()
+            logger.info(f"[Vista] BD de Comunas limpiada: {count_eliminados} registros eliminados.")
+            messages.warning(
+                request,
+                f'Base de datos limpiada: {count_eliminados} comunas eliminadas.'
+            )
+
+        try:
+            upload_dir = Path(settings.MEDIA_ROOT) / 'uploads' / 'comunas'
+            ruta_archivo = guardar_archivo_temporal(archivo, upload_dir)
+        except Exception as e:
+            logger.error(f"[Vista] Error al guardar archivo comunas: {e}")
+            messages.error(request, f'Error al guardar el archivo: {e}')
+            return render(request, self.template_name, {'form': form})
+
+        try:
+            # Importación dinámica del servicio ETL de comunas
+            from etl_app.services.comunas_etl import procesar_archivo_comunas
+            resultado = procesar_archivo_comunas(ruta_archivo)
+
+            request.session['resultado_etl'] = formatear_resultado_para_template(resultado)
+            request.session['tipo_etl'] = 'comunas'
+
+            messages.success(
+                request,
+                f'ETL completado: {resultado.insertados} comunas insertadas, '
+                f'{resultado.duplicados} duplicadas omitidas, '
+                f'{resultado.errores} errores.'
+            )
+
+        except FileNotFoundError as e:
+            messages.error(request, f'Archivo no encontrado: {e}')
+            return render(request, self.template_name, {'form': form})
+        except Exception as e:
+            logger.error(f"[Vista] Error en ETL Comunas: {e}", exc_info=True)
+            messages.error(request, f'Error durante el procesamiento ETL: {e}')
+            return render(request, self.template_name, {'form': form})
+
+        return redirect('etl_app:resultado')
 
 
 # ══════════════════════════════════════════════════════════════

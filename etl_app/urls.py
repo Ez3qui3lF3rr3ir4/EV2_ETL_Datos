@@ -21,6 +21,9 @@ urlpatterns = [
     path('lugares/upload/', views.UploadLugaresView.as_view(), name='upload_lugares'),
     path('lugares/', views.ListaLugaresView.as_view(), name='lista_lugares'),
 
+    # ETL Comunas
+    path('comunas/upload/', views.UploadComunasView.as_view(), name='upload_comunas'),
+
     # Resultado del último ETL
     path('resultado/', views.ResultadoView.as_view(), name='resultado'),
 

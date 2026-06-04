@@ -3,28 +3,84 @@
 
 <h1>Resultado del Proceso: {{ tipo_etl|title }}</h1>
 
+{# =═════════════════════════════════════════════════════════════ #}
+{# VISTA ESPECÍFICA: FAMOSOS                                      #}
+{# =═════════════════════════════════════════════════════════════ #}
+{% if tipo_etl == 'famosos' %}
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 2rem 0;">
+    
     <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--text-muted);">
-        <span style="color: var(--text-muted); font-size: 0.9rem;">Líneas Procesadas</span>
-        <h2 style="margin: 0.5rem 0 0 0;">{{ resultado.insertados|add:resultado.duplicados|add:resultado.errores }}</h2>
+        <span style="color: var(--text-muted); font-size: 0.9rem;">Total líneas procesadas</span>
+        <h2 style="margin: 0.5rem 0 0 0;">{{ resultado.insertados|add:resultado.duplicados|add:resultado.errores|add:resultado.omitidos }}</h2>
     </div>
     
     <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--success);">
-        <span style="color: var(--success); font-size: 0.9rem;">Nuevos Insertados</span>
+        <span style="color: var(--success); font-size: 0.9rem;">Insertados</span>
         <h2 style="margin: 0.5rem 0 0 0; color: var(--success);">{{ resultado.insertados }}</h2>
     </div>
 
     <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--warning);">
-        <span style="color: var(--warning); font-size: 0.9rem;">Duplicados</span>
+        <span style="color: var(--warning); font-size: 0.9rem;">Duplicados (omitidos)</span>
         <h2 style="margin: 0.5rem 0 0 0; color: var(--warning);">{{ resultado.duplicados }}</h2>
+    </div>
+
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid #a855f7;">
+        <span style="color: #a855f7; font-size: 0.9rem;">Con fecha aproximada</span>
+        <h2 style="margin: 0.5rem 0 0 0; color: #a855f7;">{{ resultado.aproximados }}</h2>
+    </div>
+
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--danger);">
+        <span style="color: var(--danger); font-size: 0.9rem;">Errores de parseo</span>
+        <h2 style="margin: 0.5rem 0 0 0; color: var(--danger);">{{ resultado.errores }}</h2>
+    </div>
+
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid #64748b;">
+        <span style="color: #64748b; font-size: 0.9rem;">Líneas omitidas</span>
+        <h2 style="margin: 0.5rem 0 0 0; color: #64748b;">{{ resultado.omitidos }}</h2>
+    </div>
+</div>
+
+{# =═════════════════════════════════════════════════════════════ #}
+{# VISTA ESPECÍFICA: LUGARES                                      #}
+{# =═════════════════════════════════════════════════════════════ #}
+{% elif tipo_etl == 'lugares' %}
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 2rem 0;">
+    
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--text-muted);">
+        <span style="color: var(--text-muted); font-size: 0.9rem;">Total líneas procesadas</span>
+        <h2 style="margin: 0.5rem 0 0 0;">{{ resultado.insertados|add:resultado.duplicados|add:resultado.errores|add:resultado.omitidos }}</h2>
+    </div>
+    
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--success);">
+        <span style="color: var(--success); font-size: 0.9rem;">Insertados</span>
+        <h2 style="margin: 0.5rem 0 0 0; color: var(--success);">{{ resultado.insertados }}</h2>
+    </div>
+
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--warning);">
+        <span style="color: var(--warning); font-size: 0.9rem;">Duplicados (omitidos)</span>
+        <h2 style="margin: 0.5rem 0 0 0; color: var(--warning);">{{ resultado.duplicados }}</h2>
+    </div>
+
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid #f59e0b;">
+        <span style="color: #f59e0b; font-size: 0.9rem;">Sin coordenadas válidas</span>
+        <h2 style="margin: 0.5rem 0 0 0; color: #f59e0b;">{{ resultado.sin_coordenadas }}</h2>
     </div>
 
     <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--danger);">
         <span style="color: var(--danger); font-size: 0.9rem;">Errores</span>
         <h2 style="margin: 0.5rem 0 0 0; color: var(--danger);">{{ resultado.errores }}</h2>
     </div>
-</div>
 
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid #64748b;">
+        <span style="color: #64748b; font-size: 0.9rem;">Líneas omitidas</span>
+        <h2 style="margin: 0.5rem 0 0 0; color: #64748b;">{{ resultado.omitidos }}</h2>
+    </div>
+</div>
+{% endif %}
+
+{# =═════════════════════════════════════════════════════════════ #}
+{# BOTONES DE NAVEGACIÓN                                          #}
+{# =═════════════════════════════════════════════════════════════ #}
 <div style="margin-top: 2rem; text-align: center;">
     {% if tipo_etl == 'famosos' %}
         <a href="{% url 'etl_app:lista_famosos' %}" style="background: var(--border); color: white; padding: 1rem 2rem; border-radius: 6px; text-decoration: none; font-weight: bold;">
