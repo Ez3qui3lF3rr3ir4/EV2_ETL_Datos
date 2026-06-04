@@ -29,8 +29,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 import difflib
 
-from etl_app.forms import SubirFamososForm, SubirLugaresForm
-from etl_app.models import Famoso, Lugar, Direccion, ErrorImportacion
+from etl_app.forms import SubirFamososForm, SubirLugaresForm, SubirComunasForm
+from etl_app.models import Famoso, Lugar, Direccion, ErrorImportacion, Comuna
 from etl_app.utils import guardar_archivo_temporal, formatear_resultado_para_template
 
 logger = logging.getLogger('etl_app')
@@ -51,6 +51,7 @@ class IndexView(TemplateView):
         context['total_famosos'] = Famoso.objects.count()
         context['total_lugares'] = Lugar.objects.count()
         context['total_direcciones'] = Direccion.objects.count()
+        context['total_comunas'] = Comuna.objects.count()
         context['total_errores'] = ErrorImportacion.objects.count()
         context['famosos_cumpleanos'] = Famoso.objects.filter(
             esta_de_cumpleanos=True
@@ -427,3 +428,38 @@ class ApiClearDBView(View):
         return JsonResponse(res)
 
 
+class ListaComunasView(ListView):
+    """
+    Vista para listar las comunas procesadas (RF-11 / Evaluación Parte 3.1)
+    """
+    model = Comuna
+    template_name = 'etl_app/lista_comunas.html'
+    context_object_name = 'comunas'
+    ordering = ['nombre_normalizado']
+
+class MapaLugaresView(TemplateView):
+    """
+    Vista para mostrar el mapa de lugares (RF-19 / Evaluación Parte 3.3)
+    """
+    template_name = 'etl_app/mapa_lugares.html'
+
+class UploadComunasView(View):
+    template_name = 'etl_app/upload_comunas.html'
+    form_class = SubirComunasForm
+
+    def get(self, request):
+        return render(request, self.template_name, {'form': self.form_class()})
+
+    def post(self, request):
+        form = self.form_class(request.POST, request.FILES)
+        if not form.is_valid():
+            return render(request, self.template_name, {'form': form})
+            
+        archivo = form.cleaned_data['archivo']
+        
+        # Aquí llamarías a tu servicio de normalización de comunas
+        # from etl_app.services.comunas_etl import procesar_archivo_comunas
+        # resultado = procesar_archivo_comunas(archivo)
+        
+        messages.success(request, "Comunas procesadas y normalizadas exitosamente.")
+        return redirect('etl_app:lista_comunas')

@@ -1,69 +1,44 @@
 {% extends 'etl_app/base.html' %}
 {% block content %}
-<h1>Resultado del Proceso de Carga e Ingesta</h1>
-<p style="color: var(--text-muted)">{{ resultado.resumen }}</p>
+
+<h1>Resultado del Proceso: {{ tipo_etl|title }}</h1>
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 2rem 0;">
-    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-left: 4px solid var(--primary);">
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--text-muted);">
         <span style="color: var(--text-muted); font-size: 0.9rem;">Líneas Procesadas</span>
-        <h2 style="margin: 0.5rem 0 0 0;">{{ resultado.omitidos|add:resultado.insertados|add:resultado.duplicados|add:resultado.errores }}</h2>
+        <h2 style="margin: 0.5rem 0 0 0;">{{ resultado.insertados|add:resultado.duplicados|add:resultado.errores }}</h2>
     </div>
-    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-left: 4px solid var(--success);">
+    
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--success);">
         <span style="color: var(--success); font-size: 0.9rem;">Nuevos Insertados</span>
-        <h2 style="margin: 0.5rem 0 0 0; color: var(--success);">+{{ resultado.insertados }}</h2>
+        <h2 style="margin: 0.5rem 0 0 0; color: var(--success);">{{ resultado.insertados }}</h2>
     </div>
-    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-left: 4px solid var(--warning);">
-        <span style="color: var(--warning); font-size: 0.9rem;">Duplicados Omitidos</span>
+
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--warning);">
+        <span style="color: var(--warning); font-size: 0.9rem;">Duplicados</span>
         <h2 style="margin: 0.5rem 0 0 0; color: var(--warning);">{{ resultado.duplicados }}</h2>
     </div>
-    {% if resultado.aproximados > 0 %}
-    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-left: 4px solid #a855f7;">
-        <span style="color: #a855f7; font-size: 0.9rem;">Fechas Aproximadas</span>
-        <h2 style="margin: 0.5rem 0 0 0;">{{ resultado.aproximados }}</h2>
-    </div>
-    {% endif %}
-    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-left: 4px solid var(--danger);">
-        <span style="color: var(--danger); font-size: 0.9rem;">Errores Capturados</span>
+
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--danger);">
+        <span style="color: var(--danger); font-size: 0.9rem;">Errores</span>
         <h2 style="margin: 0.5rem 0 0 0; color: var(--danger);">{{ resultado.errores }}</h2>
     </div>
 </div>
 
-{% if resultado.lista_insertados %}
-<h3>Últimos Registros Inyectados de Forma Exitosa (Muestra)</h3>
-<table style="width: 100%; border-collapse: collapse; background: var(--bg-card); border-radius: 6px; margin-bottom: 2rem;">
-    <thead>
-        <tr style="border-bottom: 1px solid var(--border); text-align: left;">
-            <th style="padding: 1rem;">ID / Índice</th>
-            <th style="padding: 1rem;">Nombre / Registro Limpio</th>
-            <th style="padding: 1rem;">Detalles del Atributo</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for item in resultado.lista_insertados %}
-        <tr style="border-bottom: 1px solid var(--border);">
-            <td style="padding: 1rem; color: var(--text-muted)">{{ item.id|default:forloop.counter }}</td>
-            <td style="padding: 1rem;"><strong>{{ item.nombre }}</strong></td>
-            <td style="padding: 1rem; font-size: 0.9rem;">
-                {% if item.edad %}<span style="background: rgba(59,130,246,0.1); padding: 0.2rem 0.5rem; border-radius: 4px;">Edad calculada: {{ item.edad }} años</span>{% endif %}
-                {% if item.direccion %}{{ item.direccion }} | Coords: ({{ item.lat }}, {{ item.lon }}){% endif %}
-                {% if item.cumpleanos %}<span style="margin-left: 0.5rem; background: rgba(16,185,129,0.2); color: var(--success); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: bold;">🎉 ¡Hoy de cumpleaños!</span>{% endif %}
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% endif %}
-
-{% if resultado.lista_errores %}
-<h3 style="color: var(--danger);">Logs de Errores e Inconsistencias Detectadas</h3>
-<div style="background: #1a1625; border: 1px solid rgba(239,68,68,0.2); padding: 1rem; border-radius: 6px; font-family: monospace; color: #fda4af;">
-    {% for err in resultado.lista_errores %}
-    <div style="margin-bottom: 0.5rem;">[LÍNEA {{ err.linea }}] → {{ err.error }} | Raw: <span style="color: var(--text-muted)">{{ err.contenido }}</span></div>
-    {% endfor %}
+<div style="margin-top: 2rem; text-align: center;">
+    {% if tipo_etl == 'famosos' %}
+        <a href="{% url 'etl_app:lista_famosos' %}" style="background: var(--border); color: white; padding: 1rem 2rem; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            Ir a la Lista de Famosos →
+        </a>
+    {% elif tipo_etl == 'lugares' %}
+        <a href="{% url 'etl_app:lista_lugares' %}" style="background: var(--border); color: white; padding: 1rem 2rem; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            Ir a la Lista de Lugares →
+        </a>
+    {% elif tipo_etl == 'comunas' %}
+        <a href="{% url 'etl_app:lista_comunas' %}" style="background: var(--border); color: white; padding: 1rem 2rem; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            Ir a la Lista de Comunas →
+        </a>
+    {% endif %}
 </div>
-{% endif %}
 
-<div style="margin-top: 2rem;">
-    <a href="{% url 'etl_app:index' %}" style="color: var(--primary); text-decoration: none;">← Volver al Dashboard Principal</a>
-</div>
 {% endblock %}

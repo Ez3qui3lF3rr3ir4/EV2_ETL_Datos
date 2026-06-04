@@ -149,3 +149,47 @@ class SubirLugaresForm(forms.Form):
             raise forms.ValidationError(f'Error al leer el archivo: {e}')
 
         return archivo
+
+
+class SubirComunasForm(forms.Form):
+    """
+    Formulario para subir el archivo TXT de Comunas.
+    Sigue la estructura de SubirFamososForm y SubirLugaresForm.
+    """
+
+    archivo = forms.FileField(
+        label='Archivo TXT de Comunas',
+        help_text='Suba el archivo con el listado de comunas (formato TXT).',
+        validators=[validar_archivo_txt],
+        widget=forms.ClearableFileInput(attrs={
+            'accept': '.txt',
+            'id': 'id_archivo_comunas',
+        }),
+    )
+
+    limpiar_antes = forms.BooleanField(
+        label='Limpiar base de datos antes de importar',
+        required=False,
+        initial=False,
+        help_text='Elimina registros existentes de Comunas antes de la carga.',
+        widget=forms.CheckboxInput(attrs={'id': 'id_limpiar_comunas'}),
+    )
+
+    def clean_archivo(self):
+        """Validación de lectura de archivo para asegurar integridad."""
+        archivo = self.cleaned_data.get('archivo')
+        if not archivo:
+            raise forms.ValidationError('No se seleccionó ningún archivo.')
+            
+        try:
+            # Reutilizamos la lógica de lectura segura del forms.py existente
+            chunk = archivo.read(1024)
+            archivo.seek(0)
+            
+            # Decodificación básica para verificar que es texto
+            if isinstance(chunk, bytes):
+                chunk.decode('utf-8', errors='replace')
+        except Exception as e:
+            raise forms.ValidationError(f'Error al leer el archivo: {e}')
+            
+        return archivo
