@@ -62,6 +62,28 @@ class Famoso(models.Model):
         help_text='True si hoy coincide con el día y mes de nacimiento.',
     )
 
+    # ── Metadatos de Imagen (RF-14, RF-15, RF-16) ──────────────
+    imagen_url = models.URLField(
+        max_length=500,
+        null=True,
+        blank=True,
+        verbose_name='URL de la imagen',
+    )
+    
+    imagen_fuente = models.CharField(
+        max_length=200,
+        null=True,
+        blank=True,
+        verbose_name='Fuente de la imagen',
+    )
+    
+    imagen_fecha = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        verbose_name='Fecha de captura/publicación de imagen',
+    )
+
     # ── Indicadores de calidad ─────────────────────────────────
     es_fecha_aproximada = models.BooleanField(
         default=False,
@@ -333,3 +355,103 @@ class ErrorImportacion(models.Model):
 
     def __str__(self):
         return f"[{self.dataset}] Línea {self.linea_numero}: {self.tipo_error}"
+
+# ══════════════════════════════════════════════════════════════
+# DATASET 3 — COMUNAS (RF-01 a RF-11)
+# ══════════════════════════════════════════════════════════════
+
+class Comuna(models.Model):
+    """
+    Entidad principal del dataset de comunas.
+    Cumple con el RF-08 (Almacenamiento persistente) y RF-09 (Control de duplicados).
+    """
+    nombre_original = models.CharField(
+        max_length=200,
+        verbose_name='Nombre original',
+    )
+
+    nombre_normalizado = models.CharField(
+        max_length=200,
+        unique=True,
+        verbose_name='Nombre normalizado',
+        help_text='Nombre limpio y estandarizado para control de duplicados (RF-03, RF-04).',
+    )
+
+    region = models.CharField(
+        max_length=200,
+        null=True,
+        blank=True,
+        verbose_name='Región',
+        help_text='Obtenido de fuente externa (RF-05, RF-06).',
+    )
+
+    habitantes = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Cantidad de habitantes',
+        help_text='Obtenido de fuente externa (RF-05, RF-06).',
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Creada en')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Actualizada en')
+
+    class Meta:
+        verbose_name = 'Comuna'
+        verbose_name_plural = 'Comunas'
+        ordering = ['nombre_normalizado']
+        indexes = [
+            models.Index(fields=['nombre_normalizado']),
+        ]
+
+    def __str__(self):
+        return self.nombre_normalizado
+
+
+# ══════════════════════════════════════════════════════════════
+# AUDITORÍA Y MONITOREO (RF-21 a RF-25)
+# ══════════════════════════════════════════════════════════════
+
+class EjecucionETL(models.Model):
+    """
+    Registro de cada ejecución del proceso ETL (RF-21).
+    Almacena métricas de procesamiento (RF-23).
+    """
+    DATASET_CHOICES = [
+        ('famosos', 'Famosos'),
+        ('lugares', 'Lugares'),
+        ('comunas', 'Comunas'),
+    ]
+
+    dataset = models.CharField(
+        max_length=20,
+        choices=DATASET_CHOICES,
+        verbose_name='Dataset Procesado',
+    )
+
+    fecha_inicio = models.DateTimeField(
+        default=timezone.now,
+        verbose_name='Fecha y hora de inicio'
+    )
+
+    fecha_fin = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Fecha y hora de término'
+    )
+
+    # Métricas de procesamiento (RF-23)
+    registros_leidos = models.IntegerField(default=0, verbose_name='Registros leídos')
+    registros_procesados = models.IntegerField(default=0, verbose_name='Registros procesados')
+    duplicados_eliminados = models.IntegerField(default=0, verbose_name='Duplicados eliminados')
+    registros_consolidados = models.IntegerField(default=0, verbose_name='Registros consolidados')
+    registros_no_encontrados = models.IntegerField(default=0, verbose_name='Registros no encontrados')
+    errores = models.IntegerField(default=0, verbose_name='Cantidad de errores')
+
+    class Meta:
+        verbose_name = 'Ejecución ETL'
+        verbose_name_plural = 'Ejecuciones ETL'
+        ordering = ['-fecha_inicio']
+
+    def __str__(self):
+        return f"Ejecución ETL - {self.get_dataset_display()} - {self.fecha_inicio.strftime('%Y-%m-%d %H:%M:%S')}"
+

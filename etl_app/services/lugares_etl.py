@@ -76,8 +76,16 @@ def procesar_archivo_lugares(ruta_archivo: str | Path) -> ResultadoETLLugares:
     Retorna:
         ResultadoETLLugares con estadísticas completas.
     """
+    from etl_app.models import EjecucionETL
+    from django.utils import timezone
+
     ruta = Path(ruta_archivo)
     resultado = ResultadoETLLugares()
+
+    ejecucion = EjecucionETL.objects.create(
+        dataset='lugares',
+        fecha_inicio=timezone.now()
+    )
 
     if not ruta.exists():
         logger.error(f"[ETL Lugares] Archivo no encontrado: {ruta}")
@@ -87,6 +95,7 @@ def procesar_archivo_lugares(ruta_archivo: str | Path) -> ResultadoETLLugares:
 
     lineas = _leer_archivo_lugares(ruta)
     resultado.total_lineas = len(lineas)
+    ejecucion.registros_leidos = len(lineas)
     logger.info(f"[ETL Lugares] Total de líneas a procesar: {len(lineas)}")
 
     for num_linea, linea in enumerate(lineas, start=1):
@@ -94,8 +103,11 @@ def procesar_archivo_lugares(ruta_archivo: str | Path) -> ResultadoETLLugares:
             linea=linea,
             num_linea=num_linea,
             resultado=resultado,
+            ejecucion=ejecucion
         )
 
+    ejecucion.fecha_fin = timezone.now()
+    ejecucion.save()
     logger.info(f"[ETL Lugares] Completado. {resultado.resumen()}")
     return resultado
 
@@ -128,7 +140,7 @@ def _leer_archivo_lugares(ruta: Path) -> list:
         return f.readlines()
 
 
-def _procesar_linea_lugar(linea: str, num_linea: int, resultado: ResultadoETLLugares):
+def _procesar_linea_lugar(linea: str, num_linea: int, resultado: ResultadoETLLugares, ejecucion=None):
     """
     Procesa una sola línea del archivo de lugares.
     Modifica resultado in-place.
@@ -151,6 +163,9 @@ def _procesar_linea_lugar(linea: str, num_linea: int, resultado: ResultadoETLLug
         resultado.omitidos += 1
         return
 
+    if ejecucion:
+        ejecucion.registros_procesados += 1
+
     # ── Omitir header explícitamente ───────────────────────────
     if es_header_lugares(linea_limpia):
         resultado.omitidos += 1
@@ -169,6 +184,7 @@ def _procesar_linea_lugar(linea: str, num_linea: int, resultado: ResultadoETLLug
             mensaje="La línea no tiene 3 columnas separadas por ';'",
         )
         resultado.errores += 1
+        if ejecucion: ejecucion.errores += 1
         resultado.lista_errores.append({
             'linea': num_linea,
             'contenido': linea_limpia,
@@ -186,6 +202,7 @@ def _procesar_linea_lugar(linea: str, num_linea: int, resultado: ResultadoETLLug
         msg = '; '.join(errores_val)
         _registrar_error_lugar(num_linea, linea_limpia, 'formato_invalido', msg)
         resultado.errores += 1
+        if ejecucion: ejecucion.errores += 1
         resultado.lista_errores.append({'linea': num_linea, 'contenido': linea_limpia, 'error': msg})
         return
 
@@ -204,6 +221,7 @@ def _procesar_linea_lugar(linea: str, num_linea: int, resultado: ResultadoETLLug
     if es_duplicado_lugar(hash_registro):
         logger.info(f"[ETL Lugares] DUP: {nombre_norm}")
         resultado.duplicados += 1
+        if ejecucion: ejecucion.duplicados_eliminados += 1
         resultado.lista_duplicados.append({
             'nombre': nombre_norm,
             'direccion': dir_info['direccion_completa'],
@@ -258,6 +276,7 @@ def _procesar_linea_lugar(linea: str, num_linea: int, resultado: ResultadoETLLug
 
             # 4. Actualizar estadísticas de éxito
             resultado.insertados += 1
+            if ejecucion: ejecucion.registros_consolidados += 1
             resultado.lista_insertados.append({
                 'id': lugar.id,
                 'nombre': lugar.nombre_lugar,
@@ -275,6 +294,7 @@ def _procesar_linea_lugar(linea: str, num_linea: int, resultado: ResultadoETLLug
         logger.error(f"[ETL Lugares] Error al guardar línea {num_linea}: {e}")
         _registrar_error_lugar(num_linea, linea_limpia, 'otro', str(e))
         resultado.errores += 1
+        if ejecucion: ejecucion.errores += 1
         resultado.lista_errores.append({
             'linea': num_linea, 
             'contenido': linea_limpia, 

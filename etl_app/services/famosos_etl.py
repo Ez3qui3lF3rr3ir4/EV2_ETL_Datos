@@ -85,10 +85,16 @@ def procesar_archivo_famosos(ruta_archivo: str | Path) -> ResultadoETL:
         buscar_famoso_por_nombre_y_fecha,
     )
     from etl_app.services.validators import validar_linea_famoso, validar_fecha_nacimiento
-    from etl_app.models import Famoso, ErrorImportacion
+    from etl_app.models import Famoso, ErrorImportacion, EjecucionETL
+    from django.utils import timezone
 
     ruta = Path(ruta_archivo)
     resultado = ResultadoETL()
+
+    ejecucion = EjecucionETL.objects.create(
+        dataset='famosos',
+        fecha_inicio=timezone.now()
+    )
 
     if not ruta.exists():
         logger.error(f"[ETL Famosos] Archivo no encontrado: {ruta}")
@@ -99,6 +105,7 @@ def procesar_archivo_famosos(ruta_archivo: str | Path) -> ResultadoETL:
     # ── Leer archivo con manejo de encoding ───────────────────
     lineas = _leer_archivo(ruta)
     resultado.total_lineas = len(lineas)
+    ejecucion.registros_leidos = len(lineas)
     logger.info(f"[ETL Famosos] Total de líneas a procesar: {len(lineas)}")
 
     # ── Procesar cada línea ───────────────────────────────────
@@ -107,8 +114,11 @@ def procesar_archivo_famosos(ruta_archivo: str | Path) -> ResultadoETL:
             linea=linea,
             num_linea=num_linea,
             resultado=resultado,
+            ejecucion=ejecucion
         )
 
+    ejecucion.fecha_fin = timezone.now()
+    ejecucion.save()
     logger.info(f"[ETL Famosos] Completado. {resultado.resumen()}")
     return resultado
 
@@ -136,7 +146,7 @@ def _leer_archivo(ruta: Path) -> list:
         return f.readlines()
 
 
-def _procesar_linea_famoso(linea: str, num_linea: int, resultado: ResultadoETL):
+def _procesar_linea_famoso(linea: str, num_linea: int, resultado: ResultadoETL, ejecucion=None):
     """
     Procesa una sola línea del archivo de famosos.
     Modifica resultado in-place.
@@ -149,6 +159,7 @@ def _procesar_linea_famoso(linea: str, num_linea: int, resultado: ResultadoETL):
         buscar_famoso_por_nombre_y_fecha,
     )
     from etl_app.services.validators import validar_linea_famoso, validar_fecha_nacimiento
+    from etl_app.services.external_apis import fetch_famoso_image
     from etl_app.models import Famoso, ErrorImportacion
 
     linea_limpia = linea.strip()
@@ -157,6 +168,9 @@ def _procesar_linea_famoso(linea: str, num_linea: int, resultado: ResultadoETL):
     if not linea_limpia:
         resultado.omitidos += 1
         return
+
+    if ejecucion:
+        ejecucion.registros_procesados += 1
 
     # ── PASO 1: Parsear ────────────────────────────────────────
     parsed = parse_linea_famoso(linea_limpia)
@@ -171,6 +185,7 @@ def _procesar_linea_famoso(linea: str, num_linea: int, resultado: ResultadoETL):
             mensaje=f"La línea no sigue el patrón 'N. Nombre - Fecha'",
         )
         resultado.errores += 1
+        if ejecucion: ejecucion.errores += 1
         resultado.lista_errores.append({
             'linea': num_linea,
             'contenido': linea_limpia,
@@ -194,6 +209,7 @@ def _procesar_linea_famoso(linea: str, num_linea: int, resultado: ResultadoETL):
             mensaje=msg,
         )
         resultado.errores += 1
+        if ejecucion: ejecucion.errores += 1
         resultado.lista_errores.append({'linea': num_linea, 'contenido': linea_limpia, 'error': msg})
         return
 
@@ -209,6 +225,7 @@ def _procesar_linea_famoso(linea: str, num_linea: int, resultado: ResultadoETL):
     if es_duplicado_famoso(hash_registro):
         logger.info(f"[ETL Famosos] DUP (hash): {nombre_norm} — {fecha_raw}")
         resultado.duplicados += 1
+        if ejecucion: ejecucion.duplicados_eliminados += 1
         resultado.lista_duplicados.append({
             'nombre': nombre_norm,
             'fecha': fecha_raw,
@@ -220,6 +237,7 @@ def _procesar_linea_famoso(linea: str, num_linea: int, resultado: ResultadoETL):
     if buscar_famoso_por_nombre_y_fecha(nombre_norm, fecha_obj):
         logger.info(f"[ETL Famosos] DUP (semántico): {nombre_norm} — {fecha_raw}")
         resultado.duplicados += 1
+        if ejecucion: ejecucion.duplicados_eliminados += 1
         resultado.lista_duplicados.append({
             'nombre': nombre_norm,
             'fecha': fecha_raw,
@@ -241,6 +259,9 @@ def _procesar_linea_famoso(linea: str, num_linea: int, resultado: ResultadoETL):
         resultado.lista_aproximados.append({'nombre': nombre_norm, 'fecha': fecha_raw})
         logger.info(f"[ETL Famosos] APROX: {nombre_norm} — {fecha_raw}")
 
+    # ── Fetch Image API (RF-13, RF-14) ────────────────────────
+    img_data = fetch_famoso_image(nombre_norm)
+
     # ── PASO 8: Insertar en BD ─────────────────────────────────
     try:
         with transaction.atomic():
@@ -250,9 +271,13 @@ def _procesar_linea_famoso(linea: str, num_linea: int, resultado: ResultadoETL):
                 fecha_original=fecha_raw,
                 es_fecha_aproximada=es_aproximada,
                 hash_registro=hash_registro,
+                imagen_url=img_data["url"] if img_data else None,
+                imagen_fuente=img_data["fuente"] if img_data else None,
+                imagen_fecha=img_data["fecha"] if img_data else None,
                 # edad_actual y esta_de_cumpleanos se calculan en save()
             )
             resultado.insertados += 1
+            if ejecucion: ejecucion.registros_consolidados += 1
             resultado.lista_insertados.append({
                 'id': famoso.id,
                 'nombre': famoso.nombre_completo,
@@ -277,6 +302,7 @@ def _procesar_linea_famoso(linea: str, num_linea: int, resultado: ResultadoETL):
             mensaje=str(e),
         )
         resultado.errores += 1
+        if ejecucion: ejecucion.errores += 1
         resultado.lista_errores.append({'linea': num_linea, 'contenido': linea_limpia, 'error': str(e)})
 
 

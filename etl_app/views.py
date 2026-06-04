@@ -24,6 +24,10 @@ from django.conf import settings
 from django.core.paginator import Paginator
 from django.views import View
 from django.views.generic import TemplateView, ListView
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+import difflib
 
 from etl_app.forms import SubirFamososForm, SubirLugaresForm
 from etl_app.models import Famoso, Lugar, Direccion, ErrorImportacion
@@ -334,3 +338,92 @@ class ListaErroresView(ListView):
         context['tipo_filter'] = self.request.GET.get('tipo', '')
         context['total_errores'] = ErrorImportacion.objects.count()
         return context
+
+# ══════════════════════════════════════════════════════════════
+# API ENDPOINTS (JSON)
+# ══════════════════════════════════════════════════════════════
+
+class ApiLugaresView(View):
+    """
+    Retorna el listado completo de lugares con sus coordenadas geográficas.
+    Útil para renderizar mapas en el frontend (RF-19, RF-20).
+    """
+    def get(self, request, *args, **kwargs):
+        lugares_georef = Lugar.objects.select_related('georeferencia').exclude(georeferencia__isnull=True)
+        data = []
+        for lugar in lugares_georef:
+            data.append({
+                'id': lugar.id,
+                'nombre': lugar.nombre_lugar,
+                'latitud': float(lugar.georeferencia.latitud),
+                'longitud': float(lugar.georeferencia.longitud),
+            })
+        return JsonResponse({'lugares': data})
+
+
+class ApiComunasSearchView(View):
+    """
+    Búsqueda inteligente de comunas (RF-11).
+    Busca coincidencias exactas primero y si no, sugiere coincidencias similares.
+    """
+    def get(self, request, *args, **kwargs):
+        query = request.GET.get('q', '').strip()
+        from etl_app.models import Comuna
+        
+        if not query:
+            return JsonResponse({'resultados': [], 'sugerencias': []})
+            
+        # 1. Búsqueda por coincidencia exacta o parcial (icontains)
+        exact_matches = list(Comuna.objects.filter(nombre_normalizado__icontains=query).values('id', 'nombre_normalizado', 'region'))
+        
+        if exact_matches:
+            return JsonResponse({'resultados': exact_matches, 'sugerencias': []})
+            
+        # 2. Si no hay coincidencias directas, búsqueda inteligente (difflib)
+        todas_comunas = list(Comuna.objects.values_list('nombre_normalizado', flat=True))
+        # Encontramos sugerencias cercanas con un corte de similitud (cutoff) de 0.6
+        sugerencias_nombres = difflib.get_close_matches(query.title(), todas_comunas, n=5, cutoff=0.6)
+        
+        sugerencias = []
+        if sugerencias_nombres:
+            sugerencias = list(Comuna.objects.filter(nombre_normalizado__in=sugerencias_nombres).values('id', 'nombre_normalizado', 'region'))
+            
+        return JsonResponse({'resultados': [], 'sugerencias': sugerencias})
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ApiClearDBView(View):
+    """
+    Endpoint para eliminar todos los datos de la base de datos.
+    Soporta POST (y DELETE) para realizar la limpieza.
+    """
+    def procesar_limpieza(self):
+        from etl_app.models import Famoso, Lugar, Direccion, Georeferencia, Comuna, EjecucionETL, ErrorImportacion
+        
+        famosos_count, _ = Famoso.objects.all().delete()
+        lugares_count, _ = Lugar.objects.all().delete()
+        Direccion.objects.all().delete()
+        Georeferencia.objects.all().delete()
+        comunas_count, _ = Comuna.objects.all().delete()
+        ejecuciones_count, _ = EjecucionETL.objects.all().delete()
+        errores_count, _ = ErrorImportacion.objects.all().delete()
+        
+        return {
+            'mensaje': 'Base de datos limpiada con éxito.',
+            'eliminados': {
+                'famosos': famosos_count,
+                'lugares': lugares_count,
+                'comunas': comunas_count,
+                'ejecuciones': ejecuciones_count,
+                'errores': errores_count
+            }
+        }
+
+    def post(self, request, *args, **kwargs):
+        res = self.procesar_limpieza()
+        return JsonResponse(res)
+        
+    def delete(self, request, *args, **kwargs):
+        res = self.procesar_limpieza()
+        return JsonResponse(res)
+
+

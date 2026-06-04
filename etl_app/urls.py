@@ -26,4 +26,9 @@ urlpatterns = [
 
     # Errores de importación
     path('errores/', views.ListaErroresView.as_view(), name='lista_errores'),
+
+    # API Endpoints (RF-11, RF-19, RF-20)
+    path('api/lugares/', views.ApiLugaresView.as_view(), name='api_lugares'),
+    path('api/comunas/search/', views.ApiComunasSearchView.as_view(), name='api_comunas_search'),
+    path('api/clear-db/', views.ApiClearDBView.as_view(), name='api_clear_db'),
 ]
