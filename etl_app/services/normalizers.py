@@ -45,6 +45,25 @@ def normalizar_nombre(texto: str) -> str:
     return texto.strip()
 
 
+def normalizar_comuna_busqueda(texto: str) -> str:
+    """
+    Normalización estricta para búsqueda y deduplicación de comunas.
+    Elimina acentos, convierte a minúsculas y quita caracteres no alfanuméricos.
+    Ej: "Alto Biobío", "Alto BIo bio", "ALTO BIOBIO" → "altobiobio"
+    """
+    if not texto:
+        return ''
+    
+    import unicodedata
+    # Pasar a minúsculas y quitar espacios externos
+    texto = texto.lower().strip()
+    # Eliminar acentos
+    texto = ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
+    # Eliminar cualquier caracter que no sea letra o número
+    texto = re.sub(r'[^a-z0-9]', '', texto)
+    return texto
+
+
 # ══════════════════════════════════════════════════════════════
 # NORMALIZACIÓN DE FECHAS (Dataset Famosos)
 # ══════════════════════════════════════════════════════════════

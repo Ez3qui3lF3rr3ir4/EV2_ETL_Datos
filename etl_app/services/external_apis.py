@@ -1,35 +1,87 @@
 import requests
 import logging
 from datetime import date
+from etl_app.services.normalizers import normalizar_comuna_busqueda
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('etl_app')
 
-def fetch_comuna_info(nombre_comuna):
-    """
-    Intenta obtener información adicional de la comuna desde una API externa.
-    Si falla, devuelve valores por defecto.
-    """
+_COMUNAS_CACHE = None
+
+def get_comunas_fallback():
+    """Descarga un JSON alternativo público de comunas de Chile si el DPA falla."""
+    url = "https://raw.githubusercontent.com/climoralesg/api-regiones-provincias-comunas-Chile/master/territoriochile.json"
     try:
-        # Nota: La API de correos asume una estructura. Adaptaremos si es necesario.
-        # Aquí hacemos una petición simulada o una búsqueda en un listado público.
-        # Como no tenemos clave de API real o certeza de la estructura de /v2/comunas, 
-        # hacemos un try general.
-        url = "https://apis.digital.gob.cl/dpa/comunas" # Alternativa pública chilena sin key (fallback)
-        # O la de correos: url = "https://developers.correos.cl/v2/comunas"
-        
-        # Haremos mock interno simple para no bloquear el ETL si la red falla
-        # Asumiendo que es una petición real:
-        # response = requests.get(url, timeout=5)
-        # if response.status_code == 200:
-        #    ... procesar
-        pass
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            datos = response.json()
+            comunas_planas = []
+            for region in datos:
+                nombre_region = region.get("nombre", "Región Desconocida")
+                for provincia in region.get("provincias", []):
+                    for comuna in provincia.get("comunas", []):
+                        comunas_planas.append({
+                            "nombre": comuna.get("nombre"),
+                            "codigo_region": nombre_region,
+                        })
+            return comunas_planas
     except Exception as e:
-        logger.warning(f"Error consultando API de comunas: {e}")
+        logger.warning(f"Falló el repositorio de fallback en Github: {e}")
+    return []
+
+def get_comunas_api():
+    """Obtiene la lista de comunas desde la API de ChileAbierto, usando caché local."""
+    global _COMUNAS_CACHE
+    if _COMUNAS_CACHE is None:
+        url = "https://chileabierto.cl/api/v1/comunas"
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                _COMUNAS_CACHE = response.json().get('data', [])
+                logger.info(f"API ChileAbierto cargada exitosamente: {len(_COMUNAS_CACHE)} comunas encontradas.")
+                return _COMUNAS_CACHE
+            else:
+                logger.warning(f"Error HTTP al consultar API ChileAbierto: {response.status_code}")
+        except Exception as e:
+            logger.warning(f"No se pudo conectar a la API ChileAbierto: {e}")
+        
+        logger.info("Intentando usar repositorio de fallback en Github para comunas...")
+        fallback_data = get_comunas_fallback()
+        if fallback_data:
+            _COMUNAS_CACHE = fallback_data
+            logger.info(f"Fallback cargado exitosamente: {len(_COMUNAS_CACHE)} comunas encontradas.")
+        else:
+            _COMUNAS_CACHE = []
+            
+    return _COMUNAS_CACHE
+
+def fetch_comuna_info(nombre_comuna_raw):
+    """
+    Valida la comuna contra la API oficial.
+    Retorna un diccionario con 'nombre_oficial', 'region' y 'habitantes' si existe, o None si no es válida.
+    Si la API está caída, retorna un fallback asumiendo que es válida.
+    """
+    comunas_api = get_comunas_api()
+    nombre_busqueda = normalizar_comuna_busqueda(nombre_comuna_raw)
     
-    # Mock fallback
+    if comunas_api:
+        for c in comunas_api:
+            nombre_api = c.get("name") or c.get("nombre", "")
+            if normalizar_comuna_busqueda(nombre_api) == nombre_busqueda:
+                # Comuna oficial encontrada
+                return {
+                    "nombre_oficial": nombre_api,
+                    "region": c.get("region_name") or c.get("codigo_region", "Región Desconocida"),
+                    "habitantes": c.get("population")
+                }
+        
+        # La API respondió correctamente, pero la comuna no se encontró (es inválida)
+        return None
+    
+    # Fallback si la API está caída (se asume válida, con el nombre lo más limpio posible)
     return {
-        "region": "Región Desconocida",
-        "habitantes": 10000
+        "nombre_oficial": " ".join(nombre_comuna_raw.title().split()),
+        "region": "Región Desconocida (Offline)",
+        "habitantes": None
     }
 
 def fetch_famoso_image(nombre_famoso):

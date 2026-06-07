@@ -5,7 +5,7 @@ from etl_app.models import Comuna, EjecucionETL, ErrorImportacion
 from etl_app.services.external_apis import fetch_comuna_info
 from dataclasses import dataclass, field
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('etl_app')
 
 @dataclass
 class ResultadoETL:
@@ -59,6 +59,13 @@ class ComunasETLService:
         resultado.total_lineas = len(lineas)
         self.ejecucion.registros_leidos = len(lineas)
 
+        # Pre-cargar comunas existentes para deduplicación robusta
+        from etl_app.services.normalizers import normalizar_comuna_busqueda
+        comunas_existentes = {
+            normalizar_comuna_busqueda(c.nombre_normalizado): c.nombre_normalizado 
+            for c in Comuna.objects.all()
+        }
+
         # Procesar línea por línea
         for i, linea in enumerate(lineas, start=1):
             nombre_original = linea.strip()
@@ -68,35 +75,58 @@ class ComunasETLService:
 
             self.ejecucion.registros_procesados += 1
 
-            # Normalización
-            nombre_normalizado = " ".join(nombre_original.title().split())
+            # Validar y obtener datos oficiales desde la API
+            api_info = fetch_comuna_info(nombre_original)
+            
+            if not api_info:
+                # Comuna inválida o no encontrada
+                self.ejecucion.errores += 1
+                resultado.errores += 1
+                ErrorImportacion.objects.create(
+                    dataset='comunas',
+                    linea_numero=i,
+                    contenido_original=nombre_original,
+                    tipo_error='otro',
+                    mensaje_error='Comuna no encontrada en el registro oficial (API DPA).'
+                )
+                resultado.lista_errores.append({
+                    'linea': i,
+                    'contenido': nombre_original,
+                    'error': 'No existe en API DPA',
+                })
+                continue
 
-            # Duplicado
-            if Comuna.objects.filter(nombre_normalizado=nombre_normalizado).exists():
+            nombre_busqueda = normalizar_comuna_busqueda(nombre_original)
+            nombre_oficial = api_info["nombre_oficial"]
+
+            # Verificación de Duplicado usando normalización estricta
+            if nombre_busqueda in comunas_existentes:
                 self.ejecucion.duplicados_eliminados += 1
                 resultado.duplicados += 1
                 resultado.lista_duplicados.append({
                     'linea': i,
-                    'nombre': nombre_normalizado,
+                    'nombre': nombre_oficial,
                 })
+                logger.info(f"[ETL Comunas] DUP (semántico): {nombre_original} -> {comunas_existentes[nombre_busqueda]}")
                 continue
-
-            # Consulta API externa
-            api_info = fetch_comuna_info(nombre_normalizado)
 
             try:
                 comuna = Comuna.objects.create(
                     nombre_original=nombre_original,
-                    nombre_normalizado=nombre_normalizado,
-                    region=api_info.get("region") if api_info else None,
-                    habitantes=api_info.get("habitantes") if api_info else None
+                    nombre_normalizado=nombre_oficial,
+                    region=api_info.get("region"),
+                    habitantes=api_info.get("habitantes")
                 )
+                
+                # Agregar al diccionario en memoria para las siguientes líneas
+                comunas_existentes[nombre_busqueda] = nombre_oficial
+                logger.info(f"[ETL Comunas] Insertada: {nombre_oficial}")
                 self.ejecucion.registros_consolidados += 1
                 resultado.insertados += 1
                 resultado.lista_insertados.append({
                     'id': comuna.id,
                     'linea': i,
-                    'nombre': nombre_normalizado,
+                    'nombre': nombre_oficial,
                 })
             except Exception as e:
                 self.ejecucion.errores += 1

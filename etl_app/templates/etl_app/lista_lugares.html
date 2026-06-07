@@ -10,6 +10,64 @@
     Listado de ubicaciones procesadas. Los datos crudos del TXT se han limpiado de encoding corrupto y estructurado en tres tablas relacionales independientes (<strong>Lugar</strong>, <strong>Dirección</strong> y <strong>Georeferencia</strong>).
 </p>
 
+<!-- MAPA INTERACTIVO -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<div style="margin-bottom: 2rem; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <div id="mapa-lugares" style="height: 450px; width: 100%; background: #1a1a1a; z-index: 1;"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Inicializar mapa centrado en el mundo
+    var map = L.map('mapa-lugares').setView([0, 0], 2);
+
+    // Añadir capa oscura para que coincida con el estilo de la app
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20
+    }).addTo(map);
+
+    // Obtener todos los lugares georeferenciados desde la API
+    fetch("{% url 'etl_app:api_lugares' %}")
+        .then(response => response.json())
+        .then(data => {
+            var lugares = data.lugares;
+            if (lugares && lugares.length > 0) {
+                var bounds = [];
+                lugares.forEach(lugar => {
+                    var marker = L.marker([lugar.latitud, lugar.longitud]).addTo(map);
+                    
+                    var popupContent = `
+                        <div style="font-family: inherit; color: #333; text-align: left; min-width: 200px;">
+                            <h4 style="margin: 0 0 8px 0; color: #111; font-size: 1.1rem;">${lugar.nombre}</h4>
+                            <p style="margin: 0 0 12px 0; font-size: 0.9em; color: #666;">
+                                <strong>Lat:</strong> ${lugar.latitud}<br>
+                                <strong>Lng:</strong> ${lugar.longitud}
+                            </p>
+                            <a href="https://www.google.com/maps/dir/?api=1&destination=${lugar.latitud},${lugar.longitud}" 
+                               target="_blank" 
+                               style="display: block; text-align: center; background: #10b981; color: white; text-decoration: none; padding: 8px 12px; border-radius: 4px; font-weight: bold; font-size: 0.9em; transition: opacity 0.2s;">
+                                📍 Llegar ahí (Google Maps)
+                            </a>
+                        </div>
+                    `;
+                    marker.bindPopup(popupContent);
+                    bounds.push([lugar.latitud, lugar.longitud]);
+                });
+                
+                // Auto-ajustar el zoom para mostrar todos los pines
+                if (bounds.length > 0) {
+                    map.fitBounds(bounds, {padding: [30, 30]});
+                }
+            }
+        })
+        .catch(err => console.error("Error cargando lugares para el mapa:", err));
+});
+</script>
+
 <div style="margin-bottom: 2rem;">
     <button onclick="toggleDatosTablas()" style="background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid var(--success); padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 0.5rem; transition: background 0.2s;">
         📊 <span>Tablas Independientes</span>
