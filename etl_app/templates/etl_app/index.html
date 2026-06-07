@@ -21,7 +21,7 @@
     <div style="background: var(--bg-card); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
         <h3 style="color: var(--info, #17a2b8); margin: 0;">Comunas</h3>
         <p style="font-size: 2.5rem; font-weight: 700; margin: 0.5rem 0;">{{ total_comunas }}</p>
-        <a href="#" style="color: var(--info, #17a2b8); font-size: 0.9rem; text-decoration: none; font-weight: 500;">Ver Registros →</a>
+        <a href="{% url 'etl_app:lista_comunas' %}" style="color: var(--info, #17a2b8); font-size: 0.9rem; text-decoration: none; font-weight: 500;">Ver Registros →</a>
     </div>
 
 </div>

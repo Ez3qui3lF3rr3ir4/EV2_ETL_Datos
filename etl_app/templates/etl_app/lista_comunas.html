@@ -1,0 +1,268 @@
+{% extends 'etl_app/base.html' %}
+{% block title %}Listado de Comunas{% endblock %}
+{% block content %}
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <h1>Registro de Comunas</h1>
+    <a href="{% url 'etl_app:index' %}" style="color: var(--text-muted); text-decoration: none;">← Volver al Panel</a>
+</div>
+
+<p style="color: var(--text-muted);">Listado de comunas importadas con búsqueda inteligente y autocompletar.</p>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- BARRA DE BÚSQUEDA CON AUTOCOMPLETAR                     -->
+<!-- ════════════════════════════════════════════════════════ -->
+
+<div style="position: relative; margin-bottom: 2rem;">
+    <input 
+        type="text" 
+        id="buscar-comuna"
+        placeholder="Escribe el nombre de una comuna..." 
+        autocomplete="off"
+        style="
+            width: 100%; 
+            padding: 0.75rem; 
+            font-size: 1rem; 
+            border: 1px solid var(--border); 
+            border-radius: 6px; 
+            background: var(--bg-input, rgb(7, 10, 16));
+            color: var(--text-primary);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        "
+    >
+    
+    <!-- Dropdown de sugerencias -->
+    <div 
+        id="sugerencias-dropdown" 
+        style="
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        "
+    >
+        <div id="lista-sugerencias"></div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- TABLA DE COMUNAS SELECCIONADAS/RESULTADOS               -->
+<!-- ════════════════════════════════════════════════════════ -->
+
+<table style="width: 100%; border-collapse: collapse; background: var(--bg-card); border-radius: 8px; overflow: hidden; margin-top: 1rem; border: 1px solid var(--border);">
+    <thead>
+        <tr style="border-bottom: 1px solid var(--border); text-align: left; background: rgba(0,0,0,0.25);">
+            <th style="padding: 1rem; color: var(--primary);">ID</th>
+            <th style="padding: 1rem;">Nombre (Normalizado)</th>
+            <th style="padding: 1rem;">Nombre Original</th>
+            <th style="padding: 1rem;">Región</th>
+            <th style="padding: 1rem;">Habitantes</th>
+        </tr>
+    </thead>
+
+    <tbody>
+        {% for comuna in comunas %}
+        <tr style="border-bottom: 1px solid var(--border); font-size: 0.95rem;">
+            <td style="padding: 1rem; font-weight: bold; color: var(--text-muted);">#{{ comuna.id }}</td>
+            <td style="padding: 1rem;"><strong>{{ comuna.nombre_normalizado }}</strong></td>
+            <td style="padding: 1rem; color: var(--text-muted); font-size: 0.9rem;">{{ comuna.nombre_original }}</td>
+            <td style="padding: 1rem;">{{ comuna.region|default:"—" }}</td>
+            <td style="padding: 1rem; text-align: right;">
+                {% if comuna.habitantes %}
+                    <span style="background: rgba(59,130,246,0.1); padding: 0.25rem 0.5rem; border-radius: 4px; color: #60a5fa; font-family: monospace;">
+                        {{ comuna.habitantes|floatformat:0 }}
+                    </span>
+                {% else %}
+                    <span style="color: var(--text-muted);">—</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+                {% if total > 0 %}
+                    No se encontraron comunas con esa búsqueda.
+                {% else %}
+                    No hay comunas registradas aún. <a href="{% url 'etl_app:upload_comunas' %}" style="color: var(--primary);">Importar datos</a>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- Paginación -->
+{% if is_paginated %}
+<div style="margin-top: 1.5rem; display: flex; gap: 0.5rem; justify-content: center;">
+    {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}" style="background: var(--border); color: white; padding: 0.5rem 1rem; border-radius: 4px; text-decoration: none;">Anterior</a>
+    {% endif %}
+    <span style="padding: 0.5rem 1rem; color: var(--text-muted);">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}" style="background: var(--border); color: white; padding: 0.5rem 1rem; border-radius: 4px; text-decoration: none;">Siguiente</a>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SCRIPT: BÚSQUEDA INTERACTIVA CON AUTOCOMPLETAR          -->
+<!-- ════════════════════════════════════════════════════════ -->
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const inputBuscar = document.getElementById('buscar-comuna');
+    const dropdown = document.getElementById('sugerencias-dropdown');
+    const listaSugerencias = document.getElementById('lista-sugerencias');
+    
+    let timeoutBusqueda = null;
+    
+    /**
+     * Realiza la búsqueda al endpoint API y muestra sugerencias
+     */
+    function buscarComunas(query) {
+        if (!query.trim()) {
+            dropdown.style.display = 'none';
+            listaSugerencias.innerHTML = '';
+            return;
+        }
+        
+        const apiUrl = "{% url 'etl_app:api_comunas_search' %}";
+        fetch(`${apiUrl}?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                const resultados = data.resultados || [];
+                const sugerencias = data.sugerencias || [];
+                const todasLasOpciones = [...resultados, ...sugerencias];
+                
+                if (todasLasOpciones.length === 0) {
+                    listaSugerencias.innerHTML = `
+                        <div style="padding: 1rem; color: var(--text-muted); text-align: center;">
+                            No se encontraron comunas similares.
+                        </div>
+                    `;
+                    dropdown.style.display = 'block';
+                    return;
+                }
+                
+                // Generar items del dropdown
+                let html = '';
+                
+                // Mostrar resultados exactos primero (con indicador)
+                if (resultados.length > 0) {
+                    html += '<div style="padding: 0.5rem 1rem; font-size: 0.8rem; color: var(--text-muted); font-weight: bold; background: rgba(0,0,0,0.1);">COINCIDENCIAS EXACTAS</div>';
+                    resultados.forEach(comuna => {
+                        html += generarItemComunaHTML(comuna, true);
+                    });
+                }
+                
+                // Mostrar sugerencias (con indicador)
+                if (sugerencias.length > 0) {
+                    html += '<div style="padding: 0.5rem 1rem; font-size: 0.8rem; color: var(--text-muted); font-weight: bold; background: rgba(0,0,0,0.1);">SUGERENCIAS</div>';
+                    sugerencias.forEach(comuna => {
+                        html += generarItemComunaHTML(comuna, false);
+                    });
+                }
+                
+                listaSugerencias.innerHTML = html;
+                dropdown.style.display = 'block';
+                
+                // Agregar event listeners a cada item
+                document.querySelectorAll('.comuna-item').forEach(item => {
+                    item.addEventListener('click', function() {
+                        const nombre = this.getAttribute('data-nombre');
+                        inputBuscar.value = nombre;
+                        dropdown.style.display = 'none';
+                        
+                        // Redirigir a la búsqueda con esta comuna
+                        window.location.href = `?q=${encodeURIComponent(nombre)}`;
+                    });
+                });
+            })
+            .catch(error => {
+                console.error('Error en búsqueda:', error);
+                listaSugerencias.innerHTML = '<div style="padding: 1rem; color: red;">Error al buscar.</div>';
+                dropdown.style.display = 'block';
+            });
+    }
+    
+    /**
+     * Genera el HTML para un item de comuna en el dropdown
+     */
+    function generarItemComunaHTML(comuna, esExacta) {
+        const estilo = esExacta 
+            ? 'background: rgba(34,197,94,0.15); border-left: 3px solid #22c55e;' 
+            : 'background: transparent; border-left: 3px solid transparent;';
+        
+        return `
+            <div 
+                class="comuna-item"
+                data-nombre="${comuna.nombre_normalizado}"
+                style="
+                    padding: 0.75rem 1rem;
+                    cursor: pointer;
+                    border-bottom: 1px solid var(--border);
+                    transition: background 0.2s;
+                    ${estilo}
+                "
+                onmouseover="this.style.background='rgba(59,130,246,0.1)'"
+                onmouseout="this.style.background='${esExacta ? 'rgba(34,197,94,0.15)' : 'transparent'}'"
+            >
+                <div style="font-weight: 500; color: var(--text-primary);">
+                    ${comuna.nombre_normalizado}
+                </div>
+                <div style="font-size: 0.85rem; color: var(--text-muted);">
+                    ${comuna.region ? '📍 ' + comuna.region : 'Región desconocida'}
+                </div>
+            </div>
+        `;
+    }
+    
+    /**
+     * Event listener: escribir en el input
+     */
+    inputBuscar.addEventListener('input', function(e) {
+        const query = e.target.value.trim();
+        
+        // Limpiar timeout anterior
+        clearTimeout(timeoutBusqueda);
+        
+        // Esperar 300ms después de dejar de escribir para evitar muchas peticiones
+        timeoutBusqueda = setTimeout(() => {
+            buscarComunas(query);
+        }, 300);
+    });
+    
+    /**
+     * Cerrar dropdown si se hace clic fuera
+     */
+    document.addEventListener('click', function(e) {
+        if (e.target !== inputBuscar && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+    
+    /**
+     * Permitir navegación con teclado (Enter)
+     */
+    inputBuscar.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const query = this.value.trim();
+            if (query) {
+                window.location.href = `?q=${encodeURIComponent(query)}`;
+            }
+        }
+    });
+});
+</script>
+
+{% endblock %}

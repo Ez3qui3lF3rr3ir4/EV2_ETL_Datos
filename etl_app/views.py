@@ -278,8 +278,8 @@ class UploadComunasView(View):
 
         try:
             # Importación dinámica del servicio ETL de comunas
-            from etl_app.services.comunas_etl import procesar_archivo_comunas
-            resultado = procesar_archivo_comunas(ruta_archivo)
+            from etl_app.services.comunas_etl import ComunasETLService
+            resultado = ComunasETLService(ruta_archivo).procesar()
 
             request.session['resultado_etl'] = formatear_resultado_para_template(resultado)
             request.session['tipo_etl'] = 'comunas'
@@ -497,4 +497,32 @@ class ApiClearDBView(View):
         res = self.procesar_limpieza()
         return JsonResponse(res)
 
+# ══════════════════════════════════════════════════════════════
+# LISTADO DE COMUNAS CON BÚSQUEDA INTERACTIVA
+# ══════════════════════════════════════════════════════════════
+
+class ListaComunasView(ListView):
+    """
+    Listado de Comunas con búsqueda interactiva.
+    El endpoint API maneja las sugerencias en tiempo real.
+    """
+    model = Comuna
+    template_name = 'etl_app/lista_comunas.html'
+    context_object_name = 'comunas'
+    paginate_by = 25
+    ordering = ['nombre_normalizado']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Si viene un parámetro 'q' (búsqueda exacta), filtrar
+        q = self.request.GET.get('q', '').strip()
+        if q:
+            qs = qs.filter(nombre_normalizado__icontains=q)
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['q'] = self.request.GET.get('q', '')
+        context['total'] = Comuna.objects.count()
+        return context
 

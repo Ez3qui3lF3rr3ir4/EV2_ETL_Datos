@@ -76,6 +76,38 @@
         <h2 style="margin: 0.5rem 0 0 0; color: #64748b;">{{ resultado.omitidos }}</h2>
     </div>
 </div>
+
+{# =═════════════════════════════════════════════════════════════ #}
+{# VISTA ESPECÍFICA: COMUNAS                                      #}
+{# =═════════════════════════════════════════════════════════════ #}
+{% elif tipo_etl == 'comunas' %}
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 2rem 0;">
+    
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--text-muted);">
+        <span style="color: var(--text-muted); font-size: 0.9rem;">Total líneas procesadas</span>
+        <h2 style="margin: 0.5rem 0 0 0;">{{ resultado.insertados|add:resultado.duplicados|add:resultado.errores|add:resultado.omitidos }}</h2>
+    </div>
+    
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--success);">
+        <span style="color: var(--success); font-size: 0.9rem;">Insertados</span>
+        <h2 style="margin: 0.5rem 0 0 0; color: var(--success);">{{ resultado.insertados }}</h2>
+    </div>
+
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--warning);">
+        <span style="color: var(--warning); font-size: 0.9rem;">Duplicados (omitidos)</span>
+        <h2 style="margin: 0.5rem 0 0 0; color: var(--warning);">{{ resultado.duplicados }}</h2>
+    </div>
+
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid var(--danger);">
+        <span style="color: var(--danger); font-size: 0.9rem;">Errores</span>
+        <h2 style="margin: 0.5rem 0 0 0; color: var(--danger);">{{ resultado.errores }}</h2>
+    </div>
+
+    <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 4px solid #64748b;">
+        <span style="color: #64748b; font-size: 0.9rem;">Líneas omitidas</span>
+        <h2 style="margin: 0.5rem 0 0 0; color: #64748b;">{{ resultado.omitidos }}</h2>
+    </div>
+</div>
 {% endif %}
 
 {# =═════════════════════════════════════════════════════════════ #}

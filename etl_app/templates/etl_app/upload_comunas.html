@@ -14,19 +14,19 @@
     <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
         
-        {% for field in form %}
-            <div style="margin-bottom: 1.5rem;">
-                <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">
-                    {{ field.label }}
-                </label>
-                {{ field }}
-                {% if field.help_text %}
-                    <small style="display: block; color: var(--text-muted); margin-top: 0.25rem;">
-                        {{ field.help_text }}
-                    </small>
-                {% endif %}
-            </div>
-        {% endfor %}
+        <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">{{ form.archivo.label }}</label>
+            {{ form.archivo }}
+            <p style="color: var(--text-muted); font-size: 0.85rem;">{{ form.archivo.help_text }}</p>
+            {% if form.archivo.errors %}<div style="color: var(--danger)">{{ form.archivo.errors }}</div>{% endif %}
+        </div>
+        <div style="margin-bottom: 2rem; background: rgba(239, 68, 68, 0.05); padding: 1rem; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.2)">
+            <label style="display: flex; align-items: center; cursor: pointer; font-weight: 500;">
+                {{ form.limpiar_antes }} <span style="margin-left: 0.5rem;">{{ form.limpiar_antes.label }}</span>
+            </label>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin: 0.5rem 0 0 1.5rem;">{{ form.limpiar_antes.help_text }}</p>
+        </div>
+
 
         <div style="margin-top: 2rem; display: flex; gap: 1rem; justify-content: flex-end;">
             <a href="{% url 'etl_app:index' %}" style="background: transparent; color: var(--text-muted); border: 1px solid var(--border); padding: 0.75rem 1.5rem; border-radius: 4px; text-decoration: none; font-weight: bold; display: inline-block;">
@@ -38,4 +38,24 @@
         </div>
     </form>
 </div>
+
+<div id="loading-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); color:white; z-index:9999; flex-direction:column; justify-content:center; align-items:center;">
+    <div style="font-size: 2rem; margin-bottom: 1rem;">⏳</div>
+    <h3>Procesando Data Set...</h3>
+    <p>Por favor, no cierres esta ventana.</p>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.querySelector('form');
+        const overlay = document.getElementById('loading-overlay');
+        
+        if (form) {
+            form.addEventListener('submit', function() {
+                // Forzamos que se muestre el overlay justo al enviar
+                overlay.style.display = 'flex';
+            });
+        }
+    });
+</script>
 {% endblock %}

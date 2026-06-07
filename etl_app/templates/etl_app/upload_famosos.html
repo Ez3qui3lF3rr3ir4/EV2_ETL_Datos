@@ -1,22 +1,41 @@
 {% extends 'etl_app/base.html' %}
+
 {% block content %}
-<h1>Cargar Dataset: Famosos (DATOS2026-2.txt)</h1>
-<div style="background: var(--bg-card); padding: 2rem; border-radius: 8px; border: 1px solid var(--border); max-width: 600px;">
-    <form method="POST" enctype="multipart/form-data">
+<div style="max-width: 600px; margin: 2rem auto; padding: 2rem; background: var(--bg-card); border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    
+    <h2 style="margin-bottom: 1.5rem; border-bottom: 2px solid var(--border); padding-bottom: 0.5rem;">
+        Cargar Dataset de Famosos
+    </h2>
+    
+    <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem;">
+        Seleccione el archivo en formato plano (<code>.txt</code>) que contiene el listado oficial de famosos para procesar e incorporar en la base de datos.
+    </p>
+
+    <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
+        
         <div style="margin-bottom: 1.5rem;">
             <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">{{ form.archivo.label }}</label>
             {{ form.archivo }}
             <p style="color: var(--text-muted); font-size: 0.85rem;">{{ form.archivo.help_text }}</p>
             {% if form.archivo.errors %}<div style="color: var(--danger)">{{ form.archivo.errors }}</div>{% endif %}
         </div>
-        <div style="margin-bottom: 2rem; background: rgba(245, 158, 11, 0.05); padding: 1rem; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.3)">
+        <div style="margin-bottom: 2rem; background: rgba(239, 68, 68, 0.05); padding: 1rem; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.2)">
             <label style="display: flex; align-items: center; cursor: pointer; font-weight: 500;">
                 {{ form.limpiar_antes }} <span style="margin-left: 0.5rem;">{{ form.limpiar_antes.label }}</span>
             </label>
             <p style="color: var(--text-muted); font-size: 0.85rem; margin: 0.5rem 0 0 1.5rem;">{{ form.limpiar_antes.help_text }}</p>
         </div>
-        <button type="submit" style="background: var(--primary); color: white; border: none; padding: 0.75rem 2rem; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 1rem;">Ejecutar Pipeline ETL</button>
+
+
+        <div style="margin-top: 2rem; display: flex; gap: 1rem; justify-content: flex-end;">
+            <a href="{% url 'etl_app:index' %}" style="background: transparent; color: var(--text-muted); border: 1px solid var(--border); padding: 0.75rem 1.5rem; border-radius: 4px; text-decoration: none; font-weight: bold; display: inline-block;">
+                Cancelar
+            </a>
+            <button type="submit" style="background: #a855f7; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 4px; font-weight: bold; cursor: pointer;">
+                Procesar Archivo →
+            </button>
+        </div>
     </form>
 </div>
 
