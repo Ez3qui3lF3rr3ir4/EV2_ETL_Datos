@@ -55,7 +55,8 @@ class Command(BaseCommand):
 
         try:
             service = ComunasETLService(ruta)
-            ejecucion = service.procesar()
+            service.procesar()
+            ejecucion = service.ejecucion
             
             self.stdout.write('\n' + '─' * 50)
             self.stdout.write(self.style.HTTP_INFO('[RESUMEN FINAL — ETL COMUNAS]'))
