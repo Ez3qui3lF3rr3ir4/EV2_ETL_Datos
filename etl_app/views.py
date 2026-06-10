@@ -16,6 +16,7 @@ Usa:
 """
 
 import logging
+import json
 from pathlib import Path
 
 from django.shortcuts import render, redirect
@@ -32,6 +33,7 @@ import difflib
 from etl_app.forms import SubirFamososForm, SubirLugaresForm, SubirComunasForm
 from etl_app.models import Famoso, Lugar, Direccion, ErrorImportacion, Comuna
 from etl_app.utils import guardar_archivo_temporal, formatear_resultado_para_template
+from etl_app.services.external_apis import get_comunas_api
 
 logger = logging.getLogger('etl_app')
 
@@ -434,32 +436,94 @@ class ApiLugaresView(View):
 
 class ApiComunasSearchView(View):
     """
-    Búsqueda inteligente de comunas (RF-11).
-    Busca coincidencias exactas primero y si no, sugiere coincidencias similares.
+    Búsqueda inteligente optimizada (RF-11).
+    - GET: Consulta localmente y en la API externa de forma volátil (sin insertar en BD).
+    - POST: Registra de forma definitiva una comuna sólo cuando el usuario la selecciona.
     """
+    
     def get(self, request, *args, **kwargs):
         query = request.GET.get('q', '').strip()
-        from etl_app.models import Comuna
         
         if not query:
-            return JsonResponse({'resultados': [], 'sugerencias': []})
+            return JsonResponse({'resultados': [], 'api_resultados': [], 'sugerencias': []})
             
-        # 1. Búsqueda por coincidencia exacta o parcial (icontains)
-        exact_matches = list(Comuna.objects.filter(nombre_normalizado__icontains=query).values('id', 'nombre_normalizado', 'region'))
+        # 1. Búsqueda por coincidencia parcial en la Base de Datos local
+        resultados_locales = list(Comuna.objects.filter(nombre_normalizado__icontains=query).values('id', 'nombre_normalizado', 'region'))
         
-        if exact_matches:
-            return JsonResponse({'resultados': exact_matches, 'sugerencias': []})
-            
-        # 2. Si no hay coincidencias directas, búsqueda inteligente (difflib)
-        todas_comunas = list(Comuna.objects.values_list('nombre_normalizado', flat=True))
-        # Encontramos sugerencias cercanas con un corte de similitud (cutoff) de 0.6
-        sugerencias_nombres = difflib.get_close_matches(query.title(), todas_comunas, n=5, cutoff=0.6)
+        # Guardamos un set de nombres locales en minúsculas para no duplicar elementos en el dropdown
+        nombres_locales = {c['nombre_normalizado'].lower() for c in resultados_locales}
         
+        api_resultados = []
         sugerencias = []
-        if sugerencias_nombres:
-            sugerencias = list(Comuna.objects.filter(nombre_normalizado__in=sugerencias_nombres).values('id', 'nombre_normalizado', 'region'))
+        
+        # 2. Si no hay coincidencias locales exactas perfectas, buscamos coincidencias en la API externa
+        try:
+            comunas_api = get_comunas_api() # Carga desde caché en memoria de tu external_apis.py
+            if comunas_api:
+                for c in comunas_api:
+                    nombre_api = c.get("name") or c.get("nombre", "")
+                    
+                    # Si el texto buscado coincide con la comuna de la API
+                    if query.lower() in nombre_api.lower():
+                        # ¡CLAVE! Sólo la mostramos si NO existe ya guardada en la base de datos
+                        if nombre_api.lower() not in nombres_locales:
+                            region_api = c.get("region_name") or c.get("codigo_region", "Región Desconocida")
+                            habitantes_api = c.get("population") or c.get("habitantes", None)
+                            
+                            # Evitamos duplicados en la lista de respuesta intermedia
+                            if not any(a['nombre_normalizado'].lower() == nombre_api.lower() for a in api_resultados):
+                                api_resultados.append({
+                                    'nombre_normalizado': nombre_api,
+                                    'region': region_api,
+                                    'habitantes': habitantes_api
+                                })
+        except Exception as e:
+            logger.error(f"[API Búsqueda] Error al leer la API remota: {e}")
+
+        # 3. Si no hay nada local ni remoto, aplicamos búsqueda difusa tradicional
+        if not resultados_locales and not api_resultados:
+            todas_comunas = list(Comuna.objects.values_list('nombre_normalizado', flat=True))
+            sugerencias_nombres = difflib.get_close_matches(query.title(), todas_comunas, n=5, cutoff=0.6)
+            if sugerencias_nombres:
+                sugerencias = list(Comuna.objects.filter(nombre_normalizado__in=sugerencias_nombres).values('id', 'nombre_normalizado', 'region'))
             
-        return JsonResponse({'resultados': [], 'sugerencias': sugerencias})
+        # Retornamos las listas limpias. api_resultados contiene lo que está "en la nube" listo para ser seleccionado
+        return JsonResponse({
+            'resultados': resultados_locales,
+            'api_resultados': api_resultados,
+            'sugerencias': sugerencias
+        })
+
+    def post(self, request, *args, **kwargs):
+        """
+        Petición AJAX que se ejecuta ÚNICAMENTE al hacer clic en una sugerencia remota.
+        Inserta la comuna con todos sus datos en la BD local de forma segura.
+        """
+        try:
+            data = json.loads(request.body)
+            nombre = data.get('nombre', '').strip()
+            region = data.get('region', '').strip()
+            habitantes = data.get('habitantes')
+            
+            if not nombre:
+                return JsonResponse({'status': 'error', 'message': 'El nombre de la comuna es obligatorio.'}, status=400)
+                
+            # Guardamos físicamente en la BD duplicando el nombre en nombre_original
+            comuna, created = Comuna.objects.get_or_create(
+                nombre_normalizado=nombre,
+                defaults={
+                    'nombre_original': nombre,
+                    'region': region,
+                    'habitantes': habitantes
+                }
+            )
+            
+            logger.info(f"[API Selección] Comuna registrada exitosamente bajo demanda: {nombre} (Creada: {created})")
+            return JsonResponse({'status': 'success', 'comuna_id': comuna.id, 'created': created})
+            
+        except Exception as e:
+            logger.error(f"[API Selección] Error al insertar comuna seleccionada: {e}")
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ApiClearDBView(View):

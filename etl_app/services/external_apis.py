@@ -87,7 +87,7 @@ def fetch_comuna_info(nombre_comuna_raw):
 def fetch_famoso_image(nombre_famoso):
     """
     Busca la imagen del famoso usando MediaWiki Action API (Wikipedia).
-    Utiliza el motor de búsqueda en lugar de títulos exactos para mayor precisión.
+    Utiliza el motor de búsqueda evaluando múltiples resultados para evitar falsos negativos.
     Intenta primero en Wikipedia en español, y si no encuentra imagen, busca en Wikipedia en inglés.
     """
     def buscar_en_wikipedia(lang, nombre):
@@ -96,18 +96,31 @@ def fetch_famoso_image(nombre_famoso):
             "action": "query",
             "generator": "search",
             "gsrsearch": nombre,
-            "gsrlimit": 1,
+            "gsrlimit": 5,         # <--- SOLUCIÓN 1: Evaluamos los primeros 5 resultados, no solo uno
             "prop": "pageimages",
             "format": "json",
             "pithumbsize": 800
         }
         try:
-            response = requests.get(url, params=params, timeout=5, headers={"User-Agent": "ETLBot/1.0"})
+            # SOLUCIÓN 3: Identificamos correctamente el bot según las políticas de Wikimedia para evitar bloqueos por ráfagas
+            headers = {
+                "User-Agent": "EV2_ETL_App/1.0 (contacto@tu_dominio_o_correo.com; Bot de Aprendizaje Informatica)"
+            }
+            response = requests.get(url, params=params, timeout=5, headers=headers)
             if response.status_code == 200:
                 data = response.json()
                 pages = data.get("query", {}).get("pages", {})
+                
+                # SOLUCIÓN 2: Recorremos los resultados candidatos buscando el primero con foto válida
                 for page_id, page_info in pages.items():
+                    title = page_info.get("title", "").lower()
+                    
+                    # Filtro opcional: Saltar páginas que explícitamente son de desambiguación
+                    if "desambiguación" in title or "disambiguation" in title:
+                        continue
+                        
                     if page_id != "-1" and "thumbnail" in page_info:
+                        logger.info(f"[Wikipedia {lang}] Imagen encontrada con éxito para '{nombre}' en artículo: '{page_info.get('title')}'")
                         return {
                             "url": page_info["thumbnail"]["source"],
                             "fuente": f"Wikipedia ({lang})",
