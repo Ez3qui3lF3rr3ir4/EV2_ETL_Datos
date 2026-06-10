@@ -7,30 +7,40 @@
 </div>
 
 <p style="color: var(--text-muted)">
-    Listado de ubicaciones procesadas. Los datos crudos del TXT se han limpiado de encoding corrupto y estructurado en tres tablas relacionales independientes (<strong>Lugar</strong>, <strong>Dirección</strong> y <strong>Georeferencia</strong>).
+    Listado de ubicaciones procesadas. Haz clic en cualquier fila de la tabla para **aislar y mostrar únicamente** ese punto en el mapa interactivo.
 </p>
 
-<!-- MAPA INTERACTIVO -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
-<div style="margin-bottom: 2rem; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+<div style="margin-bottom: 2rem; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative;">
     <div id="mapa-lugares" style="height: 450px; width: 100%; background: #1a1a1a; z-index: 1;"></div>
+    
+    <button id="btn-restablecer-mapa" style="display: none; position: absolute; top: 15px; right: 15px; z-index: 1000; background: var(--success, #10b981); color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.4); display: flex; align-items: center; gap: 0.5rem; transition: transform 0.2s, background 0.2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+        🗺️ <span>Mostrar todos los lugares de nuevo</span>
+    </button>
 </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Inicializar mapa centrado en el mundo
     var map = L.map('mapa-lugares').setView([0, 0], 2);
+    var markersMap = {}; 
+    var maxBoundsList = []; 
+    var btnRestablecer = document.getElementById('btn-restablecer-mapa');
 
-    // Añadir capa oscura para que coincida con el estilo de la app
+    // Capa de mapa oscura estilizada
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        attribution: '© OpenStreetMap contributors © CARTO',
         subdomains: 'abcd',
         maxZoom: 20
     }).addTo(map);
 
-    // Obtener todos los lugares georeferenciados desde la API
+    // Asegurar que Leaflet calcule bien el espacio disponible al cargar
+    setTimeout(function() {
+        map.invalidateSize();
+    }, 300);
+
+    // Cargar los puntos desde la API interna de Django (los JSON siempre usan puntos decimales estándar)
     fetch("{% url 'etl_app:api_lugares' %}")
         .then(response => response.json())
         .then(data => {
@@ -41,162 +51,94 @@ document.addEventListener('DOMContentLoaded', function() {
                     var marker = L.marker([lugar.latitud, lugar.longitud]).addTo(map);
                     
                     var popupContent = `
-                        <div style="font-family: inherit; color: #333; text-align: left; min-width: 200px;">
-                            <h4 style="margin: 0 0 8px 0; color: #111; font-size: 1.1rem;">${lugar.nombre}</h4>
-                            <p style="margin: 0 0 12px 0; font-size: 0.9em; color: #666;">
-                                <strong>Lat:</strong> ${lugar.latitud}<br>
-                                <strong>Lng:</strong> ${lugar.longitud}
-                            </p>
-                            <a href="https://www.google.com/maps/dir/?api=1&destination=${lugar.latitud},${lugar.longitud}" 
-                               target="_blank" 
-                               style="display: block; text-align: center; background: #10b981; color: white; text-decoration: none; padding: 8px 12px; border-radius: 4px; font-weight: bold; font-size: 0.9em; transition: opacity 0.2s;">
-                                📍 Llegar ahí (Google Maps)
-                            </a>
+                        <div style="font-family: inherit; color: #333; text-align: left; min-width: 160px;">
+                            <h4 style="margin: 0 0 4px 0; color: #111; font-size: 1rem;">${lugar.nombre}</h4>
+                            <span style="font-size: 0.85em; color: #666;">ID Registro: #${lugar.id}</span>
                         </div>
                     `;
-                    marker.bindPopup(popupContent);
+                    
+                    marker.bindPopup(popupContent, {
+                        autoPan: false, // Evita que el globo mueva la cámara de forma imprevista
+                        offset: L.point(0, -10)
+                    });
+                    
+                    markersMap[lugar.id] = marker;
                     bounds.push([lugar.latitud, lugar.longitud]);
                 });
                 
-                // Auto-ajustar el zoom para mostrar todos los pines
+                maxBoundsList = bounds;
                 if (bounds.length > 0) {
                     map.fitBounds(bounds, {padding: [30, 30]});
                 }
             }
         })
-        .catch(err => console.error("Error cargando lugares para el mapa:", err));
-});
-</script>
+        .catch(err => console.error("Error cargando el mapa:", err));
 
-<div style="margin-bottom: 2rem;">
-    <button onclick="toggleDatosTablas()" style="background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid var(--success); padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 0.5rem; transition: background 0.2s;">
-        📊 <span>Tablas Independientes</span>
-    </button>
+    // INTERACCIÓN: Clic en la fila de la tabla
+    document.querySelectorAll('.lugar-row').forEach(row => {
+        row.addEventListener('click', function() {
+            var lugarId = this.getAttribute('data-id');
 
-    <div id="seccion-datos-tablas" style="display: none; margin-top: 1rem; background: rgba(28, 36, 52, 0.5); border: 1px dashed var(--border); padding: 1.5rem; border-radius: 8px;">
-        
-        <style>
-            .tabla-scroll-contenedor {
-                max-height: 260px; 
-                overflow-y: auto; 
-                overflow-x: auto;
-                scrollbar-width: thin;
-                scrollbar-color: var(--primary) var(--bg-card);
+            // Mostrar botón de reinicio
+            btnRestablecer.style.display = 'flex';
+
+            // Estilizar fila seleccionada
+            document.querySelectorAll('.lugar-row').forEach(r => {
+                r.classList.remove('selected-row');
+                r.style.background = 'transparent';
+            });
+            this.classList.add('selected-row');
+            this.style.background = 'rgba(16, 185, 129, 0.15)';
+
+            // Aislar el marcador en el mapa (ocultar el resto)
+            for (var id in markersMap) {
+                if (id === lugarId) {
+                    map.addLayer(markersMap[id]);
+                } else {
+                    map.removeLayer(markersMap[id]);
+                }
             }
-            /* Soporte extra para navegadores basados en Webkit (Chrome, Edge, Safari) */
-            .tabla-scroll-contenedor::-webkit-scrollbar {
-                width: 6px;
-                height: 6px;
+
+            var targetMarker = markersMap[lugarId];
+            if (targetMarker) {
+                // 🌟 LA CLAVE AQUÍ: Extraemos la posición nativa que Leaflet ya conoce perfectamente
+                var posicionExacta = targetMarker.getLatLng();
+                
+                // Forzar el redibujado de dimensiones del mapa
+                map.invalidateSize();
+                
+                // Centrar la vista exactamente en la coordenada real del marcador con un zoom óptimo (17)
+                map.setView(posicionExacta, 17);
+                
+                // Abrir el popup de información en el centro exacto
+                targetMarker.openPopup();
+            } else {
+                alert("Este lugar no cuenta con un marcador geográfico válido en el mapa.");
             }
-            .tabla-scroll-contenedor::-webkit-scrollbar-track {
-                background: var(--bg-card);
-                border-radius: 4px;
-            }
-            .tabla-scroll-contenedor::-webkit-scrollbar-thumb {
-                background-color: var(--primary);
-                border-radius: 4px;
-            }
-        </style>
+        });
+    });
 
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
-            
-            <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 3px solid var(--primary);">
-                <h4 style="margin: 0 0 0.75rem 0; color: var(--primary); font-size: 0.9rem; font-family: monospace;">📋 TABLA: Lugares</h4>
-                <div class="tabla-scroll-contenedor">
-                    <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left;">
-                        <thead style="position: sticky; top: 0; background: var(--bg-card); z-index: 1;">
-                            <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted);">
-                                <th style="padding: 0.4rem;">id</th>
-                                <th style="padding: 0.4rem;">nombre_lugar</th>
-                                <th style="padding: 0.4rem; color: var(--success);">direccion_id</th>
-                                <th style="padding: 0.4rem; color: var(--warning);">georeferencia_id</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for lugar in lugares %}
-                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                                <td style="padding: 0.4rem; font-family: monospace;">{{ lugar.id }}</td>
-                                <td style="padding: 0.4rem; font-weight: bold;">{{ lugar.nombre_lugar|truncatechars:14 }}</td>
-                                <td style="padding: 0.4rem; color: var(--success); font-family: monospace; font-weight: bold;">
-                                    {{ lugar.direccion.id|default:"NULL" }}
-                                </td>
-                                <td style="padding: 0.4rem; color: var(--warning); font-family: monospace; font-weight: bold;">
-                                    {% if lugar.georeferencia %}{{ lugar.georeferencia.id }}{% else %}NULL{% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+    // FUNCIÓN PARA DESELECCIONAR: Regresa todo a la normalidad
+    function restablecerFiltroMapa() {
+        btnRestablecer.style.display = 'none';
 
-            <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 3px solid var(--success);">
-                <h4 style="margin: 0 0 0.75rem 0; color: var(--success); font-size: 0.9rem; font-family: monospace;">📋 TABLA: Direcciones</h4>
-                <div class="tabla-scroll-contenedor">
-                    <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left;">
-                        <thead style="position: sticky; top: 0; background: var(--bg-card); z-index: 1;">
-                            <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted);">
-                                <th style="padding: 0.4rem; color: var(--success);">id (PK)</th>
-                                <th style="padding: 0.4rem;">calle</th>
-                                <th style="padding: 0.4rem;">N°</th>
-                                <th style="padding: 0.4rem;">país</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for lugar in lugares %}
-                            {% if lugar.direccion %}
-                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                                <td style="padding: 0.4rem; color: var(--success); font-family: monospace; font-weight: bold;">{{ lugar.direccion.id }}</td>
-                                <td style="padding: 0.4rem;">{{ lugar.direccion.nombre_calle|truncatechars:12 }}</td>
-                                <td style="padding: 0.4rem;">{{ lugar.direccion.numero_calle|default:"S/N" }}</td>
-                                <td style="padding: 0.4rem; color: var(--text-muted);">{{ lugar.direccion.pais|default:"-" }}</td>
-                            </tr>
-                            {% endif %}
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+        document.querySelectorAll('.lugar-row').forEach(r => {
+            r.classList.remove('selected-row');
+            r.style.background = 'transparent';
+        });
 
-            <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px; border-top: 3px solid var(--warning);">
-                <h4 style="margin: 0 0 0.75rem 0; color: var(--warning); font-size: 0.9rem; font-family: monospace;">📋 TABLA: Georeferencia</h4>
-                <div class="tabla-scroll-contenedor">
-                    <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left;">
-                        <thead style="position: sticky; top: 0; background: var(--bg-card); z-index: 1;">
-                            <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted);">
-                                <th style="padding: 0.4rem; color: var(--warning);">id (PK)</th>
-                                <th style="padding: 0.4rem;">latitud</th>
-                                <th style="padding: 0.4rem;">longitud</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for lugar in lugares %}
-                            {% if lugar.georeferencia %}
-                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                                <td style="padding: 0.4rem; color: var(--warning); font-family: monospace; font-weight: bold;">{{ lugar.georeferencia.id }}</td>
-                                <td style="padding: 0.4rem; font-family: monospace;">{{ lugar.georeferencia.latitud }}</td>
-                                <td style="padding: 0.4rem; font-family: monospace;">{{ lugar.georeferencia.longitud }}</td>
-                            </tr>
-                            {% endif %}
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+        for (var id in markersMap) {
+            map.addLayer(markersMap[id]);
+        }
 
-        </div>
-    </div>
-</div>
-
-<script>
-function toggleDatosTablas() {
-    var x = document.getElementById("seccion-datos-tablas");
-    if (x.style.display === "none") {
-        x.style.display = "block";
-    } else {
-        x.style.display = "none";
+        if (maxBoundsList.length > 0) {
+            map.invalidateSize();
+            map.fitBounds(maxBoundsList, {padding: [30, 30]});
+        }
     }
-}
+
+    btnRestablecer.addEventListener('click', restablecerFiltroMapa);
+});
 </script>
 
 <table style="width: 100%; border-collapse: collapse; background: var(--bg-card); border-radius: 8px; overflow: hidden; margin-top: 1.5rem; border: 1px solid var(--border);">
@@ -211,11 +153,16 @@ function toggleDatosTablas() {
     </thead>
     <tbody>
         {% for lugar in lugares %}
-        <tr style="border-bottom: 1px solid var(--border); font-size: 0.95rem;">
+        <tr class="lugar-row" 
+            data-id="{{ lugar.id }}" 
+            data-lat="{{ lugar.georeferencia.latitud|default:'' }}" 
+            data-lon="{{ lugar.georeferencia.longitud|default:'' }}"
+            style="border-bottom: 1px solid var(--border); font-size: 0.95rem; cursor: pointer; transition: background 0.2s;"
+            onmouseover="this.style.background='rgba(16,185,129,0.08)'"
+            onmouseout="if(!this.classList.contains('selected-row')) this.style.background='transparent'">
+            
             <td style="padding: 1rem; font-weight: bold; color: var(--text-muted);">#{{ lugar.id }}</td>
-            
             <td style="padding: 1rem;"><strong>{{ lugar.nombre_lugar }}</strong></td>
-            
             <td style="padding: 1rem;">
                 {% if lugar.direccion %}
                     {{ lugar.direccion.nombre_calle }} {{ lugar.direccion.numero_calle }}
@@ -223,7 +170,6 @@ function toggleDatosTablas() {
                     <span style="color: var(--text-muted); font-style: italic;">Sin dirección</span>
                 {% endif %}
             </td>
-            
             <td style="padding: 1rem;">
                 {% if lugar.direccion %}
                     <small style="display: block; color: var(--text-muted);">{{ lugar.direccion.ciudad_estado_provincia|default:"-" }}</small>
@@ -232,7 +178,6 @@ function toggleDatosTablas() {
                     -
                 {% endif %}
             </td>
-            
             <td style="padding: 1rem; text-align: center;">
                 {% if lugar.georeferencia %}
                     <span style="font-family: monospace; background: rgba(16,185,129,0.1); padding: 0.25rem 0.5rem; border-radius: 4px; color: #34d399; font-size: 0.85rem;">
@@ -246,7 +191,7 @@ function toggleDatosTablas() {
         {% empty %}
         <tr>
             <td colspan="5" style="padding: 3rem; text-align: center; color: var(--text-muted);">
-                No hay registros de lugares en la base de datos. ¡Inicia una carga de datos raw (.TXT)!
+                No hay registros de lugares en la base de datos.
             </td>
         </tr>
         {% endfor %}

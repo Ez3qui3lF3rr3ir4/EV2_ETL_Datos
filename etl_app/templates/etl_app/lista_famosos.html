@@ -6,12 +6,13 @@
     <a href="{% url 'etl_app:index' %}" style="color: var(--text-muted); text-decoration: none;">← Volver al Panel</a>
 </div>
 
-<p style="color: var(--text-muted)">Listado completo de celebridades procesadas, deduplicadas por SHA-256 con cálculo dinámico de edades.</p>
+<p style="color: var(--text-muted)">Listado completo de celebridades procesadas, deduplicadas por SHA-256 con cálculo dinámico de edades. Haz clic en cualquier fila para ver el detalle completo.</p>
 
 <table style="width: 100%; border-collapse: collapse; background: var(--bg-card); border-radius: 8px; overflow: hidden; margin-top: 1.5rem; border: 1px solid var(--border);">
     <thead>
         <tr style="border-bottom: 1px solid var(--border); text-align: left; background: rgba(0,0,0,0.25);">
-            <th style="padding: 1rem;">Imagen</th> <th style="padding: 1rem; color: var(--primary);">ID</th>
+            <th style="padding: 1rem;">Imagen</th> 
+            <th style="padding: 1rem; color: var(--primary);">ID</th>
             <th style="padding: 1rem;">Nombre Completo</th>
             <th style="padding: 1rem;">Fecha Nacimiento</th>
             <th style="padding: 1rem;">Edad Actual</th>
@@ -21,7 +22,19 @@
 
     <tbody>
         {% for famoso in famosos %}
-        <tr style="border-bottom: 1px solid var(--border); font-size: 0.95rem;">
+        <tr class="famoso-row" 
+            data-id="{{ famoso.id }}"
+            data-nombre="{{ famoso.nombre_completo }}"
+            data-imagen="{{ famoso.imagen_url|default:'' }}"
+            data-nacimiento="{{ famoso.fecha_nacimiento|date:'Y-m-d'|default:'Aproximada/No registra' }}"
+            data-edad="{{ famoso.edad_actual }} años"
+            data-cumpleanos="{% if famoso.esta_de_cumpleanos %}🎉 ¡HOY!{% else %}No{% endif %}"
+            data-fuente="{{ famoso.imagen_fuente|default:'Wikipedia' }}"
+            data-fecha="{{ famoso.imagen_fecha|default:'No registrada' }}"
+            style="border-bottom: 1px solid var(--border); font-size: 0.95rem; cursor: pointer; transition: background 0.2s;"
+            onmouseover="this.style.background='rgba(59,130,246,0.08)'"
+            onmouseout="this.style.background='transparent'">
+            
             <td style="padding: 1rem;">
                 {% if famoso.imagen_url %}
                     <img src="{{ famoso.imagen_url }}" alt="{{ famoso.nombre_completo }}" 
@@ -45,6 +58,9 @@
             </td>
         </tr>
         {% empty %}
+        <tr>
+            <td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-muted);">No hay famosos registrados en el sistema.</td>
+        </tr>
         {% endfor %}
     </tbody>
 </table>
@@ -60,4 +76,133 @@
     {% endif %}
 </div>
 {% endif %}
+
+
+<div id="modal-detalle" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); align-items: center; justify-content: center;">
+    <div style="background: var(--bg-card, #111827); border: 1px solid var(--border, #374151); width: 90%; max-width: 650px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); overflow: hidden; position: relative; display: flex; flex-direction: column;">
+        
+        <button id="cerrar-modal" style="position: absolute; top: 1rem; right: 1rem; background: rgba(0,0,0,0.4); border: 1px solid var(--border); color: white; border-radius: 50%; width: 32px; height: 32px; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10;">&times;</button>
+        
+        <div style="width: 100%; height: 320px; background: #0b0f17; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid var(--border);">
+            <img id="modal-img-hd" src="" alt="" style="width: 100%; height: 100%; object-fit: contain; display: none;">
+            <div id="modal-img-fallback" style="font-size: 5rem; display: none; color: var(--text-muted);">👤</div>
+        </div>
+        
+        <div style="padding: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+                <div>
+                    <span id="modal-id" style="font-size: 0.85rem; color: var(--primary); font-weight: bold; font-family: monospace;"></span>
+                    <h2 id="modal-nombre" style="margin: 0.25rem 0 0 0; font-size: 1.5rem; color: var(--text-primary);"></h2>
+                </div>
+                <div id="modal-cumpleanos-badge"></div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; border-top: 1px solid var(--border); padding-top: 1rem; margin-bottom: 1.5rem;">
+                <div>
+                    <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem; font-weight: bold; text-transform: uppercase;">Fecha de Nacimiento</label>
+                    <span id="modal-nacimiento" style="color: var(--text-primary); font-family: monospace;"></span>
+                </div>
+                <div>
+                    <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem; font-weight: bold; text-transform: uppercase;">Edad Calculada</label>
+                    <span id="modal-edad" style="color: #60a5fa; font-weight: 500;"></span>
+                </div>
+            </div>
+
+            <div style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 6px; border-left: 4px solid var(--primary, #3b82f6);">
+                <h4 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.5px;">Metadatos de Auditoría de Imagen</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.85rem;">
+                    <div>
+                        <span style="color: var(--text-muted);">Fuente API:</span> 
+                        <strong id="modal-fuente" style="color: var(--text-primary);"></strong>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-muted);">Capturada el:</span> 
+                        <strong id="modal-fecha-captura" style="color: var(--text-primary); font-family: monospace;"></strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('modal-detalle');
+    const cerrarBtn = document.getElementById('cerrar-modal');
+    
+    // Elementos internos del modal
+    const mImgHd = document.getElementById('modal-img-hd');
+    const mImgFallback = document.getElementById('modal-img-fallback');
+    const mId = document.getElementById('modal-id');
+    const mNombre = document.getElementById('modal-nombre');
+    const mNacimiento = document.getElementById('modal-nacimiento');
+    const mEdad = document.getElementById('modal-edad');
+    const mCumpleanosBadge = document.getElementById('modal-cumpleanos-badge');
+    const mFuente = document.getElementById('modal-fuente');
+    const mFechaCaptura = document.getElementById('modal-fecha-captura');
+
+    // Asignar evento click a cada fila de famosos
+    document.querySelectorAll('.famoso-row').forEach(row => {
+        row.addEventListener('click', function() {
+            // Extraer metadatos de los atributos data-*
+            const id = this.getAttribute('data-id');
+            const nombre = this.getAttribute('data-nombre');
+            const imagenUrl = this.getAttribute('data-imagen');
+            const nacimiento = this.getAttribute('data-nacimiento');
+            const edad = this.getAttribute('data-edad');
+            const cumpleanos = this.getAttribute('data-cumpleanos');
+            const fuente = this.getAttribute('data-fuente');
+            const fecha = this.getAttribute('data-fecha');
+
+            // Inyectar datos al modal
+            mId.textContent = `FAMOSO ID #${id}`;
+            mNombre.textContent = nombre;
+            mNacimiento.textContent = nacimiento;
+            mEdad.textContent = edad;
+            mFuente.textContent = fuente;
+            mFechaCaptura.textContent = fecha;
+
+            // Renderizar condicionalmente el Badge de Cumpleaños
+            if (cumpleanos.includes('HOY')) {
+                mCumpleanosBadge.innerHTML = `<span style="background: rgba(16,185,129,0.2); color: #10b981; padding: 0.4rem 0.8rem; border-radius: 20px; font-weight: bold; font-size: 0.8rem;">${cumpleanos}</span>`;
+            } else {
+                mCumpleanosBadge.innerHTML = '';
+            }
+
+            // Gestionar escalado de la imagen o renderizado del avatar por defecto
+            if (imagenUrl && imagenUrl.trim() !== "") {
+                mImgHd.src = imagenUrl;
+                mImgHd.alt = nombre;
+                mImgHd.style.display = 'block';
+                mImgFallback.style.display = 'none';
+            } else {
+                mImgHd.style.display = 'none';
+                mImgFallback.style.display = 'block';
+            }
+
+            // Mostrar el modal con flex layout
+            modal.style.display = 'flex';
+        });
+    });
+
+    // Cerrar modal al presionar el botón X
+    cerrarBtn.addEventListener('click', function() {
+        modal.style.display = 'none';
+    });
+
+    // Cerrar modal si se hace click fuera de la tarjeta principal
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+
+    // Permitir cerrar presionando la tecla Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.style.display === 'flex') {
+            modal.style.display = 'none';
+        }
+    });
+});
+</script>
 {% endblock %}
