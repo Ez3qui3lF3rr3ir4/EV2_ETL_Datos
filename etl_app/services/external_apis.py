@@ -86,57 +86,96 @@ def fetch_comuna_info(nombre_comuna_raw):
 
 def fetch_famoso_image(nombre_famoso):
     """
-    Busca la imagen del famoso usando MediaWiki Action API (Wikipedia).
-    Utiliza el motor de búsqueda evaluando múltiples resultados para evitar falsos negativos.
-    Intenta primero en Wikipedia en español, y si no encuentra imagen, busca en Wikipedia en inglés.
+    Busca la imagen del famoso en Wikipedia de forma inteligente.
+    1. Intenta búsqueda directa por título (evita que 'Coco Chanel' devuelva la tienda 'Chanel').
+    2. Si falla, busca por texto completo respetando estrictamente el orden de relevancia.
     """
-    def buscar_en_wikipedia(lang, nombre):
+    def consultar_wikipedia(lang, nombre):
         url = f"https://{lang}.wikipedia.org/w/api.php"
-        params = {
+        headers = {
+            "User-Agent": "EV2_ETL_App/1.0 (contacto@tu_dominio.com; Bot de Aprendizaje Informatica)"
+        }
+
+        # ══════════════════════════════════════════════════════════════
+        # PASO 1: INTENTO DIRECTO POR TÍTULO EXACTO (Evita cruces con marcas)
+        # ══════════════════════════════════════════════════════════════
+        params_directo = {
             "action": "query",
-            "generator": "search",
-            "gsrsearch": nombre,
-            "gsrlimit": 5,         # <--- SOLUCIÓN 1: Evaluamos los primeros 5 resultados, no solo uno
+            "titles": nombre,
             "prop": "pageimages",
+            "redirects": 1,  # <--- CLAVE: Sigue redirecciones automáticas a la persona real
             "format": "json",
             "pithumbsize": 800
         }
+        
         try:
-            # SOLUCIÓN 3: Identificamos correctamente el bot según las políticas de Wikimedia para evitar bloqueos por ráfagas
-            headers = {
-                "User-Agent": "EV2_ETL_App/1.0 (contacto@tu_dominio_o_correo.com; Bot de Aprendizaje Informatica)"
-            }
-            response = requests.get(url, params=params, timeout=5, headers=headers)
+            response = requests.get(url, params=params_directo, headers=headers, timeout=5)
             if response.status_code == 200:
-                data = response.json()
-                pages = data.get("query", {}).get("pages", {})
-                
-                # SOLUCIÓN 2: Recorremos los resultados candidatos buscando el primero con foto válida
+                pages = response.json().get("query", {}).get("pages", {})
                 for page_id, page_info in pages.items():
-                    title = page_info.get("title", "").lower()
-                    
-                    # Filtro opcional: Saltar páginas que explícitamente son de desambiguación
-                    if "desambiguación" in title or "disambiguation" in title:
-                        continue
-                        
+                    # Si el artículo existe y tiene imagen, la retornamos de inmediato
                     if page_id != "-1" and "thumbnail" in page_info:
-                        logger.info(f"[Wikipedia {lang}] Imagen encontrada con éxito para '{nombre}' en artículo: '{page_info.get('title')}'")
+                        logger.info(f"[Wikipedia {lang} - Directo] Imagen exacta encontrada para '{nombre}'")
                         return {
                             "url": page_info["thumbnail"]["source"],
                             "fuente": f"Wikipedia ({lang})",
                             "fecha": date.today().isoformat()
                         }
         except Exception as e:
-            logger.warning(f"Error consultando imagen en Wikipedia ({lang}) para {nombre}: {e}")
+            logger.warning(f"Error en búsqueda directa Wikipedia ({lang}) para {nombre}: {e}")
+
+        # ══════════════════════════════════════════════════════════════
+        # PASO 2: FALLBACK A BÚSQUEDA POR TEXTO (Si el nombre varía un poco)
+        # ══════════════════════════════════════════════════════════════
+        params_buscar = {
+            "action": "query",
+            "generator": "search",
+            "gsrsearch": nombre,
+            "gsrlimit": 5,
+            "prop": "pageimages",
+            "format": "json",
+            "pithumbsize": 800
+        }
+        
+        try:
+            response = requests.get(url, params=params_buscar, headers=headers, timeout=5)
+            if response.status_code == 200:
+                pages = response.json().get("query", {}).get("pages", {})
+                
+                # ¡SOLUCIÓN CRUCIAL!: Convertimos el dict a una lista y la ordenamos 
+                # estrictamente por el 'index' de relevancia que entrega Wikipedia.
+                paginas_ordenadas = sorted(
+                    [p for p in pages.values() if isinstance(p, dict)],
+                    key=lambda x: x.get("index", 99)
+                )
+                
+                for page_info in paginas_ordenadas:
+                    title = page_info.get("title", "").lower()
+                    page_id = str(page_info.get("pageid", "-1"))
+                    
+                    # Omitir páginas de desambiguación obvias
+                    if "desambiguación" in title or "disambiguation" in title:
+                        continue
+                        
+                    if page_id != "-1" and "thumbnail" in page_info:
+                        logger.info(f"[Wikipedia {lang} - Buscador] Imagen encontrada por relevancia para '{nombre}' en artículo: '{page_info.get('title')}'")
+                        return {
+                            "url": page_info["thumbnail"]["source"],
+                            "fuente": f"Wikipedia ({lang})",
+                            "fecha": date.today().isoformat()
+                        }
+        except Exception as e:
+            logger.warning(f"Error en buscador general Wikipedia ({lang}) para {nombre}: {e}")
+            
         return None
 
-    # Primero intentar en español
-    resultado = buscar_en_wikipedia("es", nombre_famoso)
+    # Primero intentar todo en Español
+    resultado = consultar_wikipedia("es", nombre_famoso)
     if resultado:
         return resultado
         
-    # Fallback a inglés
-    return buscar_en_wikipedia("en", nombre_famoso)
+    # Si no dio frutos, intentar en Inglés
+    return consultar_wikipedia("en", nombre_famoso)
 
 def geocode_lugar(nombre_lugar):
     """
