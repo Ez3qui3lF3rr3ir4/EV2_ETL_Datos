@@ -71,7 +71,7 @@ def fetch_comuna_info(nombre_comuna_raw):
                 return {
                     "nombre_oficial": nombre_api,
                     "region": c.get("region_name") or c.get("codigo_region", "Región Desconocida"),
-                    "habitantes": c.get("population")
+                    "habitantes": c.get("population") or c.get("habitantes"),
                 }
         
         # La API respondió correctamente, pero la comuna no se encontró (es inválida)

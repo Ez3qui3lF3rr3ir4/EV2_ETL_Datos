@@ -509,7 +509,7 @@ class ApiComunasSearchView(View):
                 return JsonResponse({'status': 'error', 'message': 'El nombre de la comuna es obligatorio.'}, status=400)
                 
             # Guardamos físicamente en la BD duplicando el nombre en nombre_original
-            comuna, created = Comuna.objects.get_or_create(
+            comuna, created = Comuna.objects.update_or_create(
                 nombre_normalizado=nombre,
                 defaults={
                     'nombre_original': nombre,
